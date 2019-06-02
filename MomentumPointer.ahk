@@ -1,10 +1,10 @@
 #NoEnv
-#SingleInstance Force
 #Persistent
-ListLines, Off
+#SingleInstance Force
 Critical 1000000000000000
 SetFormat, Floatfast, 0.11
 SetFormat, IntegerFast, d
+ListLines, Off
 
 if (true) {
 	AutoStart := new Glider()
@@ -17,7 +17,7 @@ class Glider {
 		this.appName := "Inertial Pointer"
 		this.iniFile := "config.ini"
 		this.version := "2.0"
-		this.skipStartupDialog := true ; Should be false in production..
+		this.skipStartupDialog := false ; Should be false in production..
 	
 		this.speedThreshold := 35
 		this.timeThreshold := 1055
@@ -25,9 +25,10 @@ class Glider {
 		this.distance := 0.665
 		this.rate := -0.71575335
 		
-		DllCall("QueryPerformanceFrequency", "Int64*", cFr)
-		this.cFf := Round(this.rate * 1000000 / cFr, 3)
-		this.cFr := cFr
+		this.getFreqCount := Glider.Utility.GetFrequencyCounter()
+		this.rateOffset := Round(this.rate * 1000000 / this.getFreqCount, 3)
+		
+		this.monitorSleepTime := 25 ; Note: Too low of a sleep time could cause a (silent) crash, yet too big of a value could cause an annoying delay between glide transition...
 		
 		this._setup()
 	}
@@ -124,7 +125,7 @@ class Glider {
 		; Velocity Loop - pointer movement monitor.
 		Loop {
 			Sleep, -1
-			Glider.Utility.DllSleep(19)
+			Glider.Utility.DllSleep(this.monitorSleepTime)
 			
 			i := mod(A_Index, 3)
 			if (!Glider.Utility.OnMouseMovement()) {
@@ -140,8 +141,8 @@ class Glider {
 			this.x1 := x1, this.y1 := y1
 			
 			this.cT1 := Glider.Utility.GetTickCount()
-			this["ArrayX"i] := this.cFr * (this.x1 - this.x0) / (this.cT1 - this.cT0)
-			this["ArrayY"i] := this.cFr * (this.y1 - this.y0) / (this.cT1 - this.cT0)
+			this["ArrayX"i] := this.getFreqCount * (this.x1 - this.x0) / (this.cT1 - this.cT0)
+			this["ArrayY"i] := this.getFreqCount * (this.y1 - this.y0) / (this.cT1 - this.cT0)
 			this["Array"i] := Round(Sqrt(this["ArrayX"i]**2 + this["ArrayY"i]**2))
 			
 			this.x0 := this.x1, this.y0 := this.y1
@@ -173,7 +174,7 @@ class Glider {
 			Glider.Utility.DllSleep(1)
 			; Calculate elapsed time from Velocity Loop exit and simulate inertial pointer displacement.
 			this.cT0 := Glider.Utility.GetTickCount()
-			fff := 1 - Exp((this.cT0 - this.cT1) * this.cFf / this.timeDial)
+			fff := 1 - Exp((this.cT0 - this.cT1) * this.rateOffset / this.timeDial)
 			if (Glider.Utility.OnMouseMovement() || fff > 0.978) { ; Halt on user input/thresh.
 				Glider.Utility.GetMousePos2D(x0, y0)
 				this.x0 := x0, this.y0 := y0
@@ -276,6 +277,11 @@ class Glider {
 			return (DllCall("GetQueueStatus", "UInt", 0x0400) >> 16) & 0xFFFF
 		}
 	
+		GetFrequencyCounter() {
+			DllCall("QueryPerformanceFrequency", "Int64*", getFreqCount)
+			return getFreqCount
+		}		
+		
 		GetTickCount() {
 			DllCall("QueryPerformanceCounter", "Int64*", tickCount)
 			return tickCount
