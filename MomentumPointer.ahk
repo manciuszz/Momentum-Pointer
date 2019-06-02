@@ -14,7 +14,7 @@ class Glider {
 	; static _ := Glider := new Glider()
 	
 	__Init() {
-		this.appName := "Inertial Pointer"
+		this.appName := "Momentum Pointer"
 		this.iniFile := "config.ini"
 		this.version := "2.0"
 		this.skipStartupDialog := false ; Should be false in production..
