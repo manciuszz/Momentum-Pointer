@@ -123,7 +123,7 @@ class App {
 			resetText := "`t--> OS settings unchanged. <--"
 
 		if !(this.skipStartupDialog) {
-			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " (App.Utility.GetParamFromIni(this.iniFile, this.configSectionName, "speedThreshold", this.speedThreshold)) "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
+			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " this.speedThreshold "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
 			IfMsgBox No	
 			{
 				App.Utility.DeleteParamFromIni(this._osSettingsParams)
