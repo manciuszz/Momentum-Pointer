@@ -9,31 +9,54 @@ SetFormat, IntegerFast, d
 ListLines, Off
 
 if (true) {
-	AutoStart := new Glider()
+	AttachDebugger := false
+	if (AttachDebugger && WinExist("ahk_exe notepad++.exe")) {
+		hiddenWindowState := A_DetectHiddenWindows
+		DetectHiddenWindows, On
+		if WinExist(A_ScriptFullPath " ahk_class AutoHotkey")
+			PostMessage DllCall("RegisterWindowMessage", "str", "AHK_ATTACH_DEBUGGER")
+		DetectHiddenWindows, %hiddenWindowState%
+	}
+	AutoStart := new App()
 	return
 }
 
-class Glider {
-	; static _ := Glider := new Glider()
+class App {
+	; static _ := App := new App()
 	
 	__Init() {
 		this.appName := "Momentum Pointer"
 		this.iniFile := "config.ini"
 		this.version := "2.0"
-		this.skipStartupDialog := false ; Should be false in production..
 	
+		this.configSectionName := "MomentumParameters"
+		
+		; Defaults Values
 		this.speedThreshold := 35
 		this.timeThreshold := 1055
 		this.timeDial := 1007500
 		this.distance := 0.665
 		this.rate := -0.71575335
 		
-		this.getFreqCount := Glider.Utility.GetFrequencyCounter()
+		getParamFromConfig := ObjBindMethod(App.Utility, "GetParamFromIni", this.iniFile, this.configSectionName)	
+		this.skipStartupDialog := GetKeyState("CapsLock", "t") ? 0 : %getParamFromConfig%("skipStartupDialog", false)
+		
+		this.speedThreshold := %getParamFromConfig%("speedThreshold", this.speedThreshold)
+		this.timeThreshold := %getParamFromConfig%("timeThreshold", this.timeThreshold)
+		this.timeDial := %getParamFromConfig%("timeDial", this.timeDial)
+		this.distance := %getParamFromConfig%("distance", this.distance)
+		this.rate := %getParamFromConfig%("rate", this.rate)
+
+		this.getFreqCount := App.Utility.GetFrequencyCounter()
 		this.rateOffset := Round(this.rate * (1000000 / this.getFreqCount), 3)
 		
 		this.monitorSleepTime := 25
-		
-		this.setup()
+
+		if !(this.skipStartupDialog)
+			this.guiInstance := new App.GUI(this)
+			
+		if !(this.guiInstance)
+			this.setup()
 	}
 	
 	_initSettings() {
@@ -90,9 +113,9 @@ class Glider {
 		else
 			resetText := "`t--> OS settings unchanged. <--"
 
-		IniRead, st, % this.iniFile, GlideParameters, speedThreshold
+		IniRead, speedThreshold, % this.iniFile, % this.configSectionName, speedThreshold
 		if !(this.skipStartupDialog) {
-			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " st "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
+			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " speedThreshold "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
 			IfMsgBox No	
 			{
 				IniDelete, % this.iniFile, OSsettings, resetDefaults
@@ -101,7 +124,7 @@ class Glider {
 			IfMsgBox Cancel
 				ExitApp
 		} else {
-			Glider.Utility.DllSleep(850)
+			App.Utility.DllSleep(500)
 		}
 	}
 	
@@ -129,10 +152,10 @@ class Glider {
 			; Velocity Loop - pointer movement monitor.
 			Loop {
 				Sleep, -1
-				Glider.Utility.DllSleep(this.monitorSleepTime)
+				App.Utility.DllSleep(this.monitorSleepTime)
 				
 				i := mod(A_Index, 3)
-				if (!Glider.Utility.OnMouseMovement()) {
+				if (!App.Utility.OnMouseMovement()) {
 					if (this.Array2 + this.Array1 + this.Array0 < this.speedThreshold) { ; Compare filtered average speed to Glide Activation Threshold.
 						this["Array"i] := 0 ; Update speed readings.
 						Continue ; Below speed threshold, resume velocity monitoring.
@@ -141,10 +164,10 @@ class Glider {
 				}
 				
 				; Calculate: x/y axis pointer velocity vx/vy, pointer speed. Store speed and velocity components for each data point in moving average window.
-				Glider.Utility.GetMousePos2D(x1, y1)
+				App.Utility.GetMousePos2D(x1, y1)
 				this.x1 := x1, this.y1 := y1
 				
-				this.cT1 := Glider.Utility.GetTickCount()
+				this.cT1 := App.Utility.GetTickCount()
 				this["ArrayX"i] := this.getFreqCount * (this.x1 - this.x0) / (this.cT1 - this.cT0)
 				this["ArrayY"i] := this.getFreqCount * (this.y1 - this.y0) / (this.cT1 - this.cT0)
 				this["Array"i] := Round(Sqrt(this["ArrayX"i]**2 + this["ArrayY"i]**2))
@@ -176,12 +199,12 @@ class Glider {
 		this.Array2 := this.Array1 := this.Array0 := 0  
 		; Gliding Loop - pointer glide.
 		Loop {
-			Glider.Utility.DllSleep(1)
+			App.Utility.DllSleep(1)
 			; Calculate elapsed time from Velocity Loop exit and simulate inertial pointer displacement.
-			this.cT0 := Glider.Utility.GetTickCount()
+			this.cT0 := App.Utility.GetTickCount()
 			fff := 1 - Exp((this.cT0 - this.cT1) * this.rateOffset / this.timeDial)
-			if (Glider.Utility.OnMouseMovement() || fff > 0.978) { ; Halt on user input/thresh.
-				Glider.Utility.GetMousePos2D(x0, y0)
+			if (App.Utility.OnMouseMovement() || fff > 0.978) { ; Halt on user input/thresh.
+				App.Utility.GetMousePos2D(x0, y0)
 				this.x0 := x0, this.y0 := y0
 				return this._startMonitoring()
 			}
@@ -196,7 +219,7 @@ class Glider {
 		OnExit(ObjBindMethod(this.Icon, "exitFn")) ; Register a function to be called on exit.
 		OnMessage(0x111, ObjBindMethod(this.Icon, "changeOnMsg"))
 		
-		if !(Glider.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
+		if !(App.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
 			MsgBox, RegisterRawInputDevices failure.
 		
 		Menu, Tray, Icon, % "HICON:*" this.hICon
@@ -207,7 +230,7 @@ class Glider {
 	}
 	
 	_startMonitoring() {
-		Glider.Utility.EmptyMem()
+		App.Utility.EmptyMem()
 		this._velocityMonitor()
 		this._glide()
 	}
@@ -262,10 +285,10 @@ class Glider {
 		
 		exitFn(ExitReason, ExitCode) {
 			DllCall("Winmm\timeEndPeriod", UInt, this.parent.TimePeriod) ; Should be called to restore system to normal.
-			VarSetCapacity(Glider.Utility._POINTER, 0) ;Free memory.
+			VarSetCapacity(App.Utility._POINTER, 0) ;Free memory.
 			Menu, Tray, Icon, % "HICON:*" this.hIConOff
 			TrayTip, % this.parent.appName, Terminating, 0, 0
-			Glider.Utility.DllSleep(2000)
+			App.Utility.DllSleep(2000)
 		}
 		
 		Hex2Icon(iconDataHex) {
@@ -309,7 +332,19 @@ class Glider {
 		DllSleep(timeMS) {
 			return DllCall("Sleep", "UInt", timeMS)
 		}
-
+		
+		GetParamFromIni(iniFile, sectionName, paramName, defaultParam) {
+			IniRead, foundParam, %iniFile%, %sectionName%, %paramName%
+			if (foundParam == "ERROR")
+				foundParam := defaultParam
+			return foundParam
+		}
+		
+		SetParamToIni(iniFile, sectionName, paramName, paramToWrite) {
+			IniWrite, %paramToWrite%, %iniFile%, %sectionName%, %paramName%
+			return paramToWrite
+		}
+		
 		RI_RegisterDevices(Page := 1, Usage := 2, Flags := 0x0100, HGUI := "") {
 			Flags &= 0x3731 ; valid flags
 			if Flags Is Not Integer
@@ -341,5 +376,115 @@ class Glider {
 			DllCall("SetProcessWorkingSetSize", "UInt", h, "Int", -1, "Int", -1)
 			DllCall("CloseHandle", "Int", h)
 		}
+	}
+	
+	class GUI {
+		__New(parentInstance) {
+			this.parent := parentInstance
+			this.guiName := this.parent.appName . " Parameters"
+			this.paramsMenu().render()
+		}
+		
+		render() {
+			Gui, Show,, % this.guiName
+		}
+		
+		paramsMenu() {
+			this.addLabels()
+			this.addInputs()
+			this.addReadonlyDisplays()
+			this.addMenuButton()
+			this.mapInputs()
+			return this
+		}
+		
+		saveButton() {
+			Gui, Submit
+		
+			writeToConfig := ObjBindMethod(App.Utility, "SetParamToIni", this.parent.iniFile, this.parent.configSectionName)
+			this.parent.speedThreshold := %writeToConfig%("speedThreshold", this.getInputValue("currentSpeedThreshold"))
+			this.parent.timeThreshold := %writeToConfig%("timeThreshold", this.getInputValue("currentTimeThreshold"))
+			this.parent.timeDial := %writeToConfig%("timeDial", this.getInputValue("currentTimeDial"))
+			this.parent.distance := %writeToConfig%("distance", this.getInputValue("currentDistance"))
+			this.parent.rate := %writeToConfig%("rate", this.getInputValue("currentRate"))
+			
+			%writeToConfig%("skipStartupDialog", this.getInputValue("currentCheckboxState"))
+			
+			this.parent.setup()
+		}
+		
+		addLabels() {
+			this.addMenuOption("Lower for easier gliding (defaultPlaceholder).`t`t`tAverage speed threshold:", this.parent.speedThreshold)
+			this.addMenuOption("Lower for larger deadzone (defaultPlaceholder).`t`t`tAbsolute time limit:", this.parent.timeThreshold)
+			this.addMenuOption("Lower for faster gliding (defaultPlaceholder).`t`tTime dial:", this.parent.timeDial)
+			this.addMenuOption("Lower for shorter gliding (defaultPlaceholder).`t`t`tGlide distance:", this.parent.distance)
+			this.addMenuOption("Lower for constant acceleration (defaultPlaceholder).`tGlide rate:", this.parent.rate)
+			this.addMenuOption("Disable Startup Dialog:")
+		}
+		
+		addInputs() {			
+			this.editMenuOption("Edit", "Number", "currentSpeedThreshold", "NewColumn")
+			this.editMenuOption("Edit", "Number", "currentTimeThreshold")
+			this.editMenuOption("Edit", "Number", "currentTimeDial")
+			this.editMenuOption("Edit", "Number", "currentDistance")
+			this.editMenuOption("Edit", "Number", "currentRate")
+			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", "currentCheckboxState")
+		}
+		
+		addReadonlyDisplays() {
+			this.editMenuOption("Edit", "Number", "readOnlySpeedThreshold", "NewColumn", true)
+			this.editMenuOption("Edit", "Number", "readOnlyTimeThreshold",, true)
+			this.editMenuOption("Edit", "Number", "readOnlyTimeDial",, true)
+			this.editMenuOption("Edit", "Number", "readOnlyDistance",, true)
+			this.editMenuOption("Edit", "Number", "readOnlyRate",, true)
+		}
+		
+		mapInputs() {
+			this.mapInput("currentSpeedThreshold", this.parent.speedThreshold)
+			this.mapInput("currentTimeThreshold", this.parent.timeThreshold)
+			this.mapInput("currentTimeDial", this.parent.timeDial)
+			this.mapInput("currentDistance", this.parent.distance)
+			this.mapInput("currentRate", this.parent.rate)
+			
+			this.mapInput("readOnlySpeedThreshold", this.parent.speedThreshold)
+			this.mapInput("readOnlyTimeThreshold", this.parent.timeThreshold)
+			this.mapInput("readOnlyTimeDial", this.parent.timeDial)
+			this.mapInput("readOnlyDistance", this.parent.distance)
+			this.mapInput("readOnlyRate", this.parent.rate)
+		}
+		
+		addMenuOption(labelPattern, defaultValue := "") {
+			Gui, Add, Text,, % StrReplace(labelPattern, "defaultPlaceholder", defaultValue)
+		}
+		
+		addMenuButton() {
+			global
+			Gui, Add, Button, vButton1, OK
+			local saveButtonFunc := this.saveButton.Bind(this)
+			GuiControl +g, Button1, % saveButtonFunc
+		}
+		
+		editMenuOption(controlType := "Edit", variableOptions := "Number", controlName := "", newColumn := "", readOnly := false) {
+			global
+			local controlCount := NumGet(&this.controlMap, 4 * A_PtrSize)
+			if !(controlCount)
+				this.controlMap := {}
+			this.controlMap[controlName] := "MenuOption" . controlCount
+			
+			local isNewColumn := (newColumn == "NewColumn" ? "ym" : "")
+			local isReadOnly := (readOnly ? "ReadOnly" : "")
+			
+			Gui, Add, % controlType, %variableOptions% vMenuOption%controlCount% %isNewColumn% %isReadOnly%
+		}
+		
+		mapInput(controlID, inputValue) {
+			GuiControl,, % this.controlMap[controlID], % inputValue
+		}
+		
+		getInputValue(controlID) {
+			GuiControlGet, outputVar,, % this.controlMap[controlID]
+			return outputVar
+		}
+		
 	}
 }
