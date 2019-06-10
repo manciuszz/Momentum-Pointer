@@ -60,7 +60,9 @@ class App {
 	}
 	
 	_initSettings() {
-		IniRead, resetDefaults, % this.iniFile, OSsettings, resetDefaults
+		this._osSettingsParams := { iniFile: this.iniFile, sectionName: "OSsettings", paramName: "resetDefaults", defaultParam: "ERROR" }
+		
+		resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
 		if (!FileExist(this.iniFile) || resetDefaults == "ERROR") {
 			MsgBox, 67, % "Welcome to " this.appName " v" this.version,
 			(LTrim,
@@ -70,19 +72,20 @@ class App {
 			)
 			IfMsgBox Yes
 			{
-				IniWrite, 1, % this.iniFile, OSsettings, resetDefaults
+				this._osSettingsParams.paramToWrite := 1
+				App.Utility.SetParamToIni(this._osSettingsParams)
 				this.setup()
 			}
 			IfMsgBox No
 			{
-				IniWrite, 0, % this.iniFile, OSsettings, resetDefaults
+				this._osSettingsParams.paramToWrite := 0
+				App.Utility.SetParamToIni(this._osSettingsParams)
 				this.skipStartupDialog := 1
 			}
 			IfMsgBox Cancel
 				ExitApp
 		}
-		IniRead, resetDefaults, % this.iniFile, OSsettings, resetDefaults
-		this.resetDefaults := resetDefaults
+		this.resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
 	}
 	
 	_initOSPointerSettings() {
@@ -119,12 +122,11 @@ class App {
 		else
 			resetText := "`t--> OS settings unchanged. <--"
 
-		IniRead, speedThreshold, % this.iniFile, % this.configSectionName, speedThreshold
 		if !(this.skipStartupDialog) {
-			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " speedThreshold "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
+			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " (App.Utility.GetParamFromIni(this.iniFile, this.configSectionName, "speedThreshold", this.speedThreshold)) "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
 			IfMsgBox No	
 			{
-				IniDelete, % this.iniFile, OSsettings, resetDefaults
+				App.Utility.DeleteParamFromIni(this._osSettingsParams)
 				this.setup()
 			}
 			IfMsgBox Cancel
@@ -300,7 +302,7 @@ class App {
 		Hex2Icon(iconDataHex) {
 			VarSetCapacity(IconData, (nSize := StrLen(iconDataHex) // 2))
 			Loop %nSize%
-			NumPut("0x" . SubStr(iconDataHex, 2 * A_Index - 1, 2), IconData, A_Index - 1, "Char")
+				NumPut("0x" . SubStr(iconDataHex, 2 * A_Index - 1, 2), IconData, A_Index - 1, "Char")
 			hIConf := DllCall("CreateIconFromResourceEx", UInt, &IconData + 22, UInt, NumGet(IconData, 14), Int, 1, UInt, 0x30000, Int, 16, Int, 16, UInt, 0)
 			VarSetCapacity(IconData, 0) ; Release 'IconData' from memory.
 			return hIConf
@@ -339,16 +341,47 @@ class App {
 			return DllCall("Sleep", "UInt", timeMS)
 		}
 		
-		GetParamFromIni(iniFile, sectionName, paramName, defaultParam) {
+		GetParamFromIni(args*) {
+			selectedFunction := this["GetParamFromIni" args.MaxIndex()]
+			return %selectedFunction%(this, args*)
+		}
+		
+		GetParamFromIni1(params) {	
+			return this.GetParamFromIni4(params.iniFile, params.sectionName, params.paramName, params.defaultParam)
+		}
+		
+		GetParamFromIni4(iniFile, sectionName, paramName, defaultParam) {
 			IniRead, foundParam, %iniFile%, %sectionName%, %paramName%
 			if (foundParam == "ERROR")
 				foundParam := defaultParam
 			return foundParam
 		}
 		
-		SetParamToIni(iniFile, sectionName, paramName, paramToWrite) {
+		SetParamToIni(args*) {
+			selectedFunction := this["SetParamToIni" args.MaxIndex()]
+			return %selectedFunction%(this, args*)
+		}
+		
+		SetParamToIni1(params) {
+			return this.SetParamToIni4(params.iniFile, params.sectionName, params.paramName, params.paramToWrite)
+		}
+		
+		SetParamToIni4(iniFile, sectionName, paramName, paramToWrite) {
 			IniWrite, %paramToWrite%, %iniFile%, %sectionName%, %paramName%
 			return paramToWrite
+		}
+		
+		DeleteParamFromIni(args*) {
+			selectedFunction := this["DeleteParamFromIni" args.MaxIndex()]
+			return %selectedFunction%(this, args*)
+		}
+		
+		DeleteParamFromIni1(params) {
+			return this.DeleteParamFromIni3(params.iniFile, params.sectionName, params.paramName)
+		}
+		
+		DeleteParamFromIni3(iniFile, sectionName, paramName) {
+			IniDelete, % iniFile, % sectionName, % paramName
 		}
 		
 		RI_RegisterDevices(Page := 1, Usage := 2, Flags := 0x0100, HGUI := "") {
