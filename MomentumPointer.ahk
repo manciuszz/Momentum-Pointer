@@ -69,9 +69,15 @@ class App {
 				(Revert anytime at 'Start > Mouse > Pointer Options > Motion').
 			)
 			IfMsgBox Yes
+			{
 				IniWrite, 1, % this.iniFile, OSsettings, resetDefaults
+				this.setup()
+			}
 			IfMsgBox No
+			{
 				IniWrite, 0, % this.iniFile, OSsettings, resetDefaults
+				this.skipStartupDialog := 1
+			}
 			IfMsgBox Cancel
 				ExitApp
 		}
@@ -124,7 +130,7 @@ class App {
 			IfMsgBox Cancel
 				ExitApp
 		} else {
-			App.Utility.DllSleep(500)
+			App.Utility.DllSleep(1000)
 		}
 	}
 	
