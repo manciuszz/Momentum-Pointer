@@ -5,8 +5,8 @@
 Critical 1000000000000000
 SetFormat, FloatFast, 0.11
 SetFormat, IntegerFast, d
-; SetBatchLines, -1
 ListLines, Off
+; SetBatchLines, -1 ; "Determines how fast a script will run (affects CPU utilization)."
 
 if (true) {
 	AttachDebugger := false
@@ -134,8 +134,8 @@ class App {
 		}
 	}
 	
-	_initVariables() {
-		this.TimePeriod := 7
+	_initVariables(_timePeriod := 7) {
+		this.TimePeriod := _timePeriod
 		
 		; Counters
 		this.cT0 := this.cT1 := 0 
@@ -236,7 +236,7 @@ class App {
 	}
 	
 	_startMonitoring() {
-		App.Utility.EmptyMem()
+		App.Utility.CleanMemory()
 		this._velocityMonitor()
 		this._glide()
 	}
@@ -302,7 +302,7 @@ class App {
 			Loop %nSize%
 			NumPut("0x" . SubStr(iconDataHex, 2 * A_Index - 1, 2), IconData, A_Index - 1, "Char")
 			hIConf := DllCall("CreateIconFromResourceEx", UInt, &IconData + 22, UInt, NumGet(IconData, 14), Int, 1, UInt, 0x30000, Int, 16, Int, 16, UInt, 0)
-			VarSetCapacity(IconData, 0) ; Added freeing up of memory.
+			VarSetCapacity(IconData, 0) ; Release 'IconData' from memory.
 			return hIConf
 		}
 	}
@@ -376,18 +376,18 @@ class App {
 			return DllCall("RegisterRawInputDevices", "Ptr", &RID, "UInt", 1, "UInt", StructSize, "UInt")
 		}
 		
-		EmptyMem(PID = ""){
-			pid := (pid = "") ? DllCall("GetCurrentProcessId") : pid
-			h := DllCall("OpenProcess", "UInt", 0x001F0FFF, "Int", 0, "Int", pid)
-			DllCall("SetProcessWorkingSetSize", "UInt", h, "Int", -1, "Int", -1)
-			DllCall("CloseHandle", "Int", h)
+		CleanMemory(PID = ""){
+			PID := ((PID = "") ? DllCall("GetCurrentProcessId") : PID)
+			hWnd := DllCall("OpenProcess", "UInt", 0x001F0FFF, "Int", 0, "Int", PID)
+			DllCall("SetProcessWorkingSetSize", "UInt", hWnd, "Int", -1, "Int", -1)
+			DllCall("CloseHandle", "Int", hWnd)
 		}
 	}
 	
 	class GUI {
 		__New(parentInstance) {
 			this.parent := parentInstance
-			this.guiName := this.parent.appName . " Parameters"
+			this.guiName := this.parent.appName . " | Parameters"
 			this.paramsMenu().render()
 		}
 		
@@ -400,7 +400,7 @@ class App {
 			this.addInputs()
 			this.addReadonlyDisplays()
 			this.addMenuButton()
-			this.mapInputs()
+			this.fillInputs()
 			return this
 		}
 		
@@ -438,14 +438,15 @@ class App {
 		}
 		
 		addReadonlyDisplays() {
-			this.editMenuOption("Edit", "Number", "readOnlySpeedThreshold", "NewColumn", true)
-			this.editMenuOption("Edit", "Number", "readOnlyTimeThreshold",, true)
-			this.editMenuOption("Edit", "Number", "readOnlyTimeDial",, true)
-			this.editMenuOption("Edit", "Number", "readOnlyDistance",, true)
-			this.editMenuOption("Edit", "Number", "readOnlyRate",, true)
+			ReadOnlyFLAG := true
+			this.editMenuOption("Edit", "Number", "readOnlySpeedThreshold", "NewColumn", ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", "readOnlyTimeThreshold",, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", "readOnlyTimeDial",, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", "readOnlyDistance",, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", "readOnlyRate",, ReadOnlyFLAG)
 		}
 		
-		mapInputs() {
+		fillInputs() {
 			this.mapInput("currentSpeedThreshold", this.parent.speedThreshold)
 			this.mapInput("currentTimeThreshold", this.parent.timeThreshold)
 			this.mapInput("currentTimeDial", this.parent.timeDial)
