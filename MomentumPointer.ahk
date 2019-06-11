@@ -155,8 +155,9 @@ class App {
 		this.ArrayX0 := this.ArrayY0 := this.ArrayX1 := this.ArrayY1 := this.ArrayX2 := this.ArrayY2 := 0
 	}
 	
-	_velocityMonitor() {	
-		beginMonitoring:
+	_startMonitoring() {	
+		velocityMonitor:
+			App.Utility.CleanMemory()
 			; Velocity Loop - pointer movement monitor.
 			Loop {
 				Sleep, -1
@@ -199,28 +200,29 @@ class App {
 			this.v := Sqrt(this.vx**2 + this.vy**2)
 			; if pointer will travel below 200 pixels within approx. 1s
 			if ((1 - Exp(this.timeThreshold * this.rate / 1000)) * this.v < 200)
-				Goto, beginMonitoring
+				Goto, velocityMonitor
+			Goto, Glide
 		Return
-	}
-	
-	_glide() {
-		this.Array2 := this.Array1 := this.Array0 := 0  
-		; Gliding Loop - pointer glide.
-		Loop {
-			App.Utility.DllSleep(1)
-			; Calculate elapsed time from Velocity Loop exit and simulate inertial pointer displacement.
-			this.cT0 := App.Utility.GetTickCount()
-			fff := 1 - Exp((this.cT0 - this.cT1) * this.rateOffset / this.timeDial)
-			if (App.Utility.OnMouseMovement() || fff > 0.978) { ; Halt on user input/thresh.
-				App.Utility.GetMousePos2D(x0, y0)
-				this.x0 := x0, this.y0 := y0
-				return this._startMonitoring()
+		
+		Glide:
+			this.Array2 := this.Array1 := this.Array0 := 0  
+			; Gliding Loop - pointer glide.
+			Loop {
+				App.Utility.DllSleep(1)
+				; Calculate elapsed time from Velocity Loop exit and simulate inertial pointer displacement.
+				this.cT0 := App.Utility.GetTickCount()
+				fff := (1 - Exp((this.cT0 - this.cT1) * this.rateOffset / this.timeDial))
+				if (App.Utility.OnMouseMovement() || fff > 0.978) { ; Halt on user input/thresh.
+					App.Utility.GetMousePos2D(x0, y0)
+					this.x0 := x0, this.y0 := y0
+					Goto, velocityMonitor
+				}
+				
+				x := this.x1 + this.vx * fff
+				y := this.y1 + this.vy * fff
+				DllCall("SetCursorPos", "Int", x, "Int", y)
 			}
-			
-			x := this.x1 + this.vx * fff
-			y := this.y1 + this.vy * fff
-			DllCall("SetCursorPos", "Int", x, "Int", y)
-		}
+		Return
 	}
 	
 	_main() {
@@ -235,12 +237,6 @@ class App {
 
 		DllCall("Winmm\timeBeginPeriod", "UInt", this.TimePeriod) ; Provide adequate resolution for Sleep.
 		this._startMonitoring()
-	}
-	
-	_startMonitoring() {
-		App.Utility.CleanMemory()
-		this._velocityMonitor()
-		this._glide()
 	}
 	
 	setup() {
@@ -430,10 +426,10 @@ class App {
 		
 		paramsMenu() {
 			this.addLabels()
-			this.addInputs()
-			this.addReadonlyDisplays()
+			this.addInputFields()
+			this.addReadonlyFields()
 			this.addMenuButton()
-			this.fillInputs()
+			this.fillInputFields()
 			return this
 		}
 		
@@ -461,7 +457,7 @@ class App {
 			this.addMenuOption("Disable Startup Dialog:")
 		}
 		
-		addInputs() {			
+		addInputFields() {			
 			this.editMenuOption("Edit", "Number", "currentSpeedThreshold", "NewColumn")
 			this.editMenuOption("Edit", "Number", "currentTimeThreshold")
 			this.editMenuOption("Edit", "Number", "currentTimeDial")
@@ -470,7 +466,7 @@ class App {
 			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", "currentCheckboxState")
 		}
 		
-		addReadonlyDisplays() {
+		addReadonlyFields() {
 			ReadOnlyFLAG := true
 			this.editMenuOption("Edit", "Number", "readOnlySpeedThreshold", "NewColumn", ReadOnlyFLAG)
 			this.editMenuOption("Edit", "Number", "readOnlyTimeThreshold",, ReadOnlyFLAG)
@@ -479,7 +475,7 @@ class App {
 			this.editMenuOption("Edit", "Number", "readOnlyRate",, ReadOnlyFLAG)
 		}
 		
-		fillInputs() {
+		fillInputFields() {
 			this.mapInput("currentSpeedThreshold", this.parent.speedThreshold)
 			this.mapInput("currentTimeThreshold", this.parent.timeThreshold)
 			this.mapInput("currentTimeDial", this.parent.timeDial)
