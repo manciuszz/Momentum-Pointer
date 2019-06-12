@@ -39,13 +39,13 @@ class App {
 		this.rate := -0.71575335
 		
 		getParamFromConfig := ObjBindMethod(App.Utility, "GetParamFromIni", this.iniFile, this.configSectionName)	
-		this.skipStartupDialog := GetKeyState("CapsLock", "t") ? 0 : %getParamFromConfig%("skipStartupDialog", false)
+		this.skipStartupDialog := GetKeyState("CapsLock", "t") ? 0 : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
 		
-		this.speedThreshold := %getParamFromConfig%("speedThreshold", this.speedThreshold)
-		this.timeThreshold := %getParamFromConfig%("timeThreshold", this.timeThreshold)
-		this.timeDial := %getParamFromConfig%("timeDial", this.timeDial)
-		this.distance := %getParamFromConfig%("distance", this.distance)
-		this.rate := %getParamFromConfig%("rate", this.rate)
+		this.speedThreshold := %getParamFromConfig%(App.Strings.speedThreshold, this.speedThreshold)
+		this.timeThreshold := %getParamFromConfig%(App.Strings.timeThreshold, this.timeThreshold)
+		this.timeDial := %getParamFromConfig%(App.Strings.timeDial, this.timeDial)
+		this.distance := %getParamFromConfig%(App.Strings.distance, this.distance)
+		this.rate := %getParamFromConfig%(App.Strings.rate, this.rate)
 
 		this.getFreqCount := App.Utility.GetFrequencyCounter()
 		this.rateOffset := Round(this.rate * (1000000 / this.getFreqCount), 3)
@@ -437,13 +437,13 @@ class App {
 			Gui, Submit
 		
 			writeToConfig := ObjBindMethod(App.Utility, "SetParamToIni", this.parent.iniFile, this.parent.configSectionName)
-			this.parent.speedThreshold := %writeToConfig%("speedThreshold", this.getInputValue("currentSpeedThreshold"))
-			this.parent.timeThreshold := %writeToConfig%("timeThreshold", this.getInputValue("currentTimeThreshold"))
-			this.parent.timeDial := %writeToConfig%("timeDial", this.getInputValue("currentTimeDial"))
-			this.parent.distance := %writeToConfig%("distance", this.getInputValue("currentDistance"))
-			this.parent.rate := %writeToConfig%("rate", this.getInputValue("currentRate"))
+			this.parent.speedThreshold := %writeToConfig%(App.Strings.speedThreshold, this.getInputValue(App.Strings.currentSpeedThreshold))
+			this.parent.timeThreshold := %writeToConfig%(App.Strings.timeThreshold, this.getInputValue(App.Strings.currentTimeThreshold))
+			this.parent.timeDial := %writeToConfig%(App.Strings.timeDial, this.getInputValue(App.Strings.currentTimeDial))
+			this.parent.distance := %writeToConfig%(App.Strings.distance, this.getInputValue(App.Strings.currentDistance))
+			this.parent.rate := %writeToConfig%(App.Strings.rate, this.getInputValue(App.Strings.currentRate))
 			
-			%writeToConfig%("skipStartupDialog", this.getInputValue("currentCheckboxState"))
+			%writeToConfig%("skipStartupDialog", this.getInputValue(App.Strings.currentCheckboxState))
 			
 			this.parent.setup()
 		}
@@ -458,35 +458,35 @@ class App {
 		}
 		
 		addInputFields() {			
-			this.editMenuOption("Edit", "Number", "currentSpeedThreshold", "NewColumn")
-			this.editMenuOption("Edit", "Number", "currentTimeThreshold")
-			this.editMenuOption("Edit", "Number", "currentTimeDial")
-			this.editMenuOption("Edit", "Number", "currentDistance")
-			this.editMenuOption("Edit", "Number", "currentRate")
-			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", "currentCheckboxState")
+			this.editMenuOption("Edit", "Number", App.Strings.currentSpeedThreshold, "NewColumn")
+			this.editMenuOption("Edit", "Number", App.Strings.currentTimeThreshold)
+			this.editMenuOption("Edit", "Number", App.Strings.currentTimeDial)
+			this.editMenuOption("Edit", "Number", App.Strings.currentDistance)
+			this.editMenuOption("Edit", "Number", App.Strings.currentRate)
+			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.currentCheckboxState)
 		}
 		
 		addReadonlyFields() {
 			ReadOnlyFLAG := true
-			this.editMenuOption("Edit", "Number", "readOnlySpeedThreshold", "NewColumn", ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", "readOnlyTimeThreshold",, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", "readOnlyTimeDial",, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", "readOnlyDistance",, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", "readOnlyRate",, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.readOnlySpeedThreshold, "NewColumn", ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.readOnlyTimeThreshold,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.readOnlyTimeDial,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.readOnlyDistance,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.readOnlyRate,, ReadOnlyFLAG)
 		}
 		
 		fillInputFields() {
-			this.mapInput("currentSpeedThreshold", this.parent.speedThreshold)
-			this.mapInput("currentTimeThreshold", this.parent.timeThreshold)
-			this.mapInput("currentTimeDial", this.parent.timeDial)
-			this.mapInput("currentDistance", this.parent.distance)
-			this.mapInput("currentRate", this.parent.rate)
+			this.mapInput(App.Strings.currentSpeedThreshold, this.parent.speedThreshold)
+			this.mapInput(App.Strings.currentTimeThreshold, this.parent.timeThreshold)
+			this.mapInput(App.Strings.currentTimeDial, this.parent.timeDial)
+			this.mapInput(App.Strings.currentDistance, this.parent.distance)
+			this.mapInput(App.Strings.currentRate, this.parent.rate)
 			
-			this.mapInput("readOnlySpeedThreshold", this.parent.speedThreshold)
-			this.mapInput("readOnlyTimeThreshold", this.parent.timeThreshold)
-			this.mapInput("readOnlyTimeDial", this.parent.timeDial)
-			this.mapInput("readOnlyDistance", this.parent.distance)
-			this.mapInput("readOnlyRate", this.parent.rate)
+			this.mapInput(App.Strings.readOnlySpeedThreshold, this.parent.speedThreshold)
+			this.mapInput(App.Strings.readOnlyTimeThreshold, this.parent.timeThreshold)
+			this.mapInput(App.Strings.readOnlyTimeDial, this.parent.timeDial)
+			this.mapInput(App.Strings.readOnlyDistance, this.parent.distance)
+			this.mapInput(App.Strings.readOnlyRate, this.parent.rate)
 		}
 		
 		addMenuOption(labelPattern, defaultValue := "") {
@@ -522,5 +522,26 @@ class App {
 			return outputVar
 		}
 		
+	}
+	
+	class Strings {	
+		static speedThreshold := "speedThreshold"
+		static timeThreshold := "timeThreshold"
+		static timeDial := "timeDial"
+		static distance := "distance"
+		static rate := "rate"
+	
+		static currentCheckboxState := "currentCheckboxState"
+		static currentSpeedThreshold := "currentSpeedThreshold"
+		static currentTimeThreshold := "currentTimeThreshold"
+		static currentTimeDial := "currentTimeDial"
+		static currentDistance := "currentDistance"
+		static currentRate := "currentDistance"
+		
+		static readOnlySpeedThreshold := "readOnlySpeedThreshold"
+		static readOnlyTimeThreshold := "readOnlyTimeThreshold"
+		static readOnlyTimeDial := "readOnlyTimeDial"
+		static readOnlyDistance := "readOnlyDistance"
+		static readOnlyRate := "readOnlyRate"
 	}
 }
