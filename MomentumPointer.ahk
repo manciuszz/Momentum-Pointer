@@ -22,7 +22,7 @@ if (true) {
 }
 
 class App {
-	; static _ := App := new App()
+	; static _ := App := new App() ; Interesting fact?: This makes AHK Loop run slow for whatever reason...
 	
 	__Init() {
 		this.appName := "Momentum Pointer"
@@ -443,13 +443,13 @@ class App {
 			Gui, Submit
 		
 			writeToConfig := ObjBindMethod(App.Utility, "SetParamToIni", this.parent.iniFile, this.parent.configSectionName)
-			this.parent.speedThreshold := %writeToConfig%(App.Strings.Params.speedThreshold, this.getInputValue(App.Strings.Current.speedThreshold))
-			this.parent.timeThreshold := %writeToConfig%(App.Strings.Params.timeThreshold, this.getInputValue(App.Strings.Current.timeThreshold))
-			this.parent.timeDial := %writeToConfig%(App.Strings.Params.timeDial, this.getInputValue(App.Strings.Current.timeDial))
-			this.parent.distance := %writeToConfig%(App.Strings.Params.distance, this.getInputValue(App.Strings.Current.distance))
-			this.parent.rate := %writeToConfig%(App.Strings.Params.rate, this.getInputValue(App.Strings.Current.rate))
+			this.parent.speedThreshold := %writeToConfig%(App.Strings.Params.speedThreshold, this.getInputValue(App.Strings.ActiveField.speedThreshold))
+			this.parent.timeThreshold := %writeToConfig%(App.Strings.Params.timeThreshold, this.getInputValue(App.Strings.ActiveField.timeThreshold))
+			this.parent.timeDial := %writeToConfig%(App.Strings.Params.timeDial, this.getInputValue(App.Strings.ActiveField.timeDial))
+			this.parent.distance := %writeToConfig%(App.Strings.Params.distance, this.getInputValue(App.Strings.ActiveField.distance))
+			this.parent.rate := %writeToConfig%(App.Strings.Params.rate, this.getInputValue(App.Strings.ActiveField.rate))
 			
-			%writeToConfig%(App.Strings.skipStartupDialog, this.getInputValue(App.Strings.Current.checkboxState))
+			%writeToConfig%(App.Strings.skipStartupDialog, this.getInputValue(App.Strings.ActiveField.checkboxState))
 			
 			this.parent.setup()
 		}
@@ -464,35 +464,35 @@ class App {
 		}
 		
 		addInputFields() {			
-			this.editMenuOption("Edit", "Number", App.Strings.Current.speedThreshold, "NewColumn")
-			this.editMenuOption("Edit", "Number", App.Strings.Current.timeThreshold)
-			this.editMenuOption("Edit", "Number", App.Strings.Current.timeDial)
-			this.editMenuOption("Edit", "Number", App.Strings.Current.distance)
-			this.editMenuOption("Edit", "Number", App.Strings.Current.rate)
-			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.Current.checkboxState)
+			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.speedThreshold, "NewColumn")
+			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.timeThreshold)
+			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.timeDial)
+			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.distance)
+			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.rate)
+			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.ActiveField.checkboxState)
 		}
 		
 		addReadonlyFields() {
 			ReadOnlyFLAG := true
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.speedThreshold, "NewColumn", ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.timeThreshold,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.timeDial,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.distance,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.rate,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.speedThreshold, "NewColumn", ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.timeThreshold,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.timeDial,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.distance,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.rate,, ReadOnlyFLAG)
 		}
 		
 		fillInputFields() {
-			this.mapInput(App.Strings.Current.speedThreshold, this.parent.speedThreshold)
-			this.mapInput(App.Strings.Current.timeThreshold, this.parent.timeThreshold)
-			this.mapInput(App.Strings.Current.timeDial, this.parent.timeDial)
-			this.mapInput(App.Strings.Current.distance, this.parent.distance)
-			this.mapInput(App.Strings.Current.rate, this.parent.rate)
+			this.mapInput(App.Strings.ActiveField.speedThreshold, this.parent.speedThreshold)
+			this.mapInput(App.Strings.ActiveField.timeThreshold, this.parent.timeThreshold)
+			this.mapInput(App.Strings.ActiveField.timeDial, this.parent.timeDial)
+			this.mapInput(App.Strings.ActiveField.distance, this.parent.distance)
+			this.mapInput(App.Strings.ActiveField.rate, this.parent.rate)
 			
-			this.mapInput(App.Strings.ReadOnly.speedThreshold, this.parent.speedThreshold)
-			this.mapInput(App.Strings.ReadOnly.timeThreshold, this.parent.timeThreshold)
-			this.mapInput(App.Strings.ReadOnly.timeDial, this.parent.timeDial)
-			this.mapInput(App.Strings.ReadOnly.distance, this.parent.distance)
-			this.mapInput(App.Strings.ReadOnly.rate, this.parent.rate)
+			this.mapInput(App.Strings.ReadOnlyField.speedThreshold, this.parent.speedThreshold)
+			this.mapInput(App.Strings.ReadOnlyField.timeThreshold, this.parent.timeThreshold)
+			this.mapInput(App.Strings.ReadOnlyField.timeDial, this.parent.timeDial)
+			this.mapInput(App.Strings.ReadOnlyField.distance, this.parent.distance)
+			this.mapInput(App.Strings.ReadOnlyField.rate, this.parent.rate)
 		}
 		
 		addMenuOption(labelPattern, defaultValue := "") {
@@ -542,19 +542,19 @@ class App {
 			static rate := "rate"
 		}	
 
-		static _ := App.Strings.Current := new App.Strings.Current()
-		class Current extends App.Strings.Params {
+		static _ := App.Strings.ActiveField := new App.Strings.ActiveField()
+		class ActiveField extends App.Strings.Params {
 			static checkboxState := "checkboxState"
 
 			__Get(vKey) {
-				return "current" . vKey
+				return "activeField" . vKey
 			}
 		}
 		
-		static __ := App.Strings.ReadOnly := new App.Strings.ReadOnly()
-		class ReadOnly extends App.Strings.Params {
+		static __ := App.Strings.ReadOnlyField := new App.Strings.ReadOnlyField()
+		class ReadOnlyField extends App.Strings.Params {
 			__Get(vKey) {
-				return "readOnly" . vKey
+				return "readOnlyField" . vKey
 			}
 		}
 	}
