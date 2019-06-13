@@ -41,11 +41,11 @@ class App {
 		getParamFromConfig := ObjBindMethod(App.Utility, "GetParamFromIni", this.iniFile, this.configSectionName)	
 		this.skipStartupDialog := GetKeyState("CapsLock", "t") ? 0 : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
 		
-		this.speedThreshold := %getParamFromConfig%(App.Strings.speedThreshold, this.speedThreshold)
-		this.timeThreshold := %getParamFromConfig%(App.Strings.timeThreshold, this.timeThreshold)
-		this.timeDial := %getParamFromConfig%(App.Strings.timeDial, this.timeDial)
-		this.distance := %getParamFromConfig%(App.Strings.distance, this.distance)
-		this.rate := %getParamFromConfig%(App.Strings.rate, this.rate)
+		this.speedThreshold := %getParamFromConfig%(App.Strings.Params.speedThreshold, this.speedThreshold)
+		this.timeThreshold := %getParamFromConfig%(App.Strings.Params.timeThreshold, this.timeThreshold)
+		this.timeDial := %getParamFromConfig%(App.Strings.Params.timeDial, this.timeDial)
+		this.distance := %getParamFromConfig%(App.Strings.Params.distance, this.distance)
+		this.rate := %getParamFromConfig%(App.Strings.Params.rate, this.rate)
 
 		this.getFreqCount := App.Utility.GetFrequencyCounter()
 		this.rateOffset := Round(this.rate * (1000000 / this.getFreqCount), 3)
@@ -424,6 +424,12 @@ class App {
 			Gui, Show,, % this.guiName
 		}
 		
+		_onClose() {
+			GuiClose:
+				ExitApp
+			return
+		}
+		
 		paramsMenu() {
 			this.addLabels()
 			this.addInputFields()
@@ -437,13 +443,13 @@ class App {
 			Gui, Submit
 		
 			writeToConfig := ObjBindMethod(App.Utility, "SetParamToIni", this.parent.iniFile, this.parent.configSectionName)
-			this.parent.speedThreshold := %writeToConfig%(App.Strings.speedThreshold, this.getInputValue(App.Strings.currentSpeedThreshold))
-			this.parent.timeThreshold := %writeToConfig%(App.Strings.timeThreshold, this.getInputValue(App.Strings.currentTimeThreshold))
-			this.parent.timeDial := %writeToConfig%(App.Strings.timeDial, this.getInputValue(App.Strings.currentTimeDial))
-			this.parent.distance := %writeToConfig%(App.Strings.distance, this.getInputValue(App.Strings.currentDistance))
-			this.parent.rate := %writeToConfig%(App.Strings.rate, this.getInputValue(App.Strings.currentRate))
+			this.parent.speedThreshold := %writeToConfig%(App.Strings.Params.speedThreshold, this.getInputValue(App.Strings.Current.speedThreshold))
+			this.parent.timeThreshold := %writeToConfig%(App.Strings.Params.timeThreshold, this.getInputValue(App.Strings.Current.timeThreshold))
+			this.parent.timeDial := %writeToConfig%(App.Strings.Params.timeDial, this.getInputValue(App.Strings.Current.timeDial))
+			this.parent.distance := %writeToConfig%(App.Strings.Params.distance, this.getInputValue(App.Strings.Current.distance))
+			this.parent.rate := %writeToConfig%(App.Strings.Params.rate, this.getInputValue(App.Strings.Current.rate))
 			
-			%writeToConfig%("skipStartupDialog", this.getInputValue(App.Strings.currentCheckboxState))
+			%writeToConfig%(App.Strings.skipStartupDialog, this.getInputValue(App.Strings.Current.checkboxState))
 			
 			this.parent.setup()
 		}
@@ -458,35 +464,35 @@ class App {
 		}
 		
 		addInputFields() {			
-			this.editMenuOption("Edit", "Number", App.Strings.currentSpeedThreshold, "NewColumn")
-			this.editMenuOption("Edit", "Number", App.Strings.currentTimeThreshold)
-			this.editMenuOption("Edit", "Number", App.Strings.currentTimeDial)
-			this.editMenuOption("Edit", "Number", App.Strings.currentDistance)
-			this.editMenuOption("Edit", "Number", App.Strings.currentRate)
-			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.currentCheckboxState)
+			this.editMenuOption("Edit", "Number", App.Strings.Current.speedThreshold, "NewColumn")
+			this.editMenuOption("Edit", "Number", App.Strings.Current.timeThreshold)
+			this.editMenuOption("Edit", "Number", App.Strings.Current.timeDial)
+			this.editMenuOption("Edit", "Number", App.Strings.Current.distance)
+			this.editMenuOption("Edit", "Number", App.Strings.Current.rate)
+			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.Current.checkboxState)
 		}
 		
 		addReadonlyFields() {
 			ReadOnlyFLAG := true
-			this.editMenuOption("Edit", "Number", App.Strings.readOnlySpeedThreshold, "NewColumn", ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.readOnlyTimeThreshold,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.readOnlyTimeDial,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.readOnlyDistance,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.readOnlyRate,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.speedThreshold, "NewColumn", ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.timeThreshold,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.timeDial,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.distance,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Number", App.Strings.ReadOnly.rate,, ReadOnlyFLAG)
 		}
 		
 		fillInputFields() {
-			this.mapInput(App.Strings.currentSpeedThreshold, this.parent.speedThreshold)
-			this.mapInput(App.Strings.currentTimeThreshold, this.parent.timeThreshold)
-			this.mapInput(App.Strings.currentTimeDial, this.parent.timeDial)
-			this.mapInput(App.Strings.currentDistance, this.parent.distance)
-			this.mapInput(App.Strings.currentRate, this.parent.rate)
+			this.mapInput(App.Strings.Current.speedThreshold, this.parent.speedThreshold)
+			this.mapInput(App.Strings.Current.timeThreshold, this.parent.timeThreshold)
+			this.mapInput(App.Strings.Current.timeDial, this.parent.timeDial)
+			this.mapInput(App.Strings.Current.distance, this.parent.distance)
+			this.mapInput(App.Strings.Current.rate, this.parent.rate)
 			
-			this.mapInput(App.Strings.readOnlySpeedThreshold, this.parent.speedThreshold)
-			this.mapInput(App.Strings.readOnlyTimeThreshold, this.parent.timeThreshold)
-			this.mapInput(App.Strings.readOnlyTimeDial, this.parent.timeDial)
-			this.mapInput(App.Strings.readOnlyDistance, this.parent.distance)
-			this.mapInput(App.Strings.readOnlyRate, this.parent.rate)
+			this.mapInput(App.Strings.ReadOnly.speedThreshold, this.parent.speedThreshold)
+			this.mapInput(App.Strings.ReadOnly.timeThreshold, this.parent.timeThreshold)
+			this.mapInput(App.Strings.ReadOnly.timeDial, this.parent.timeDial)
+			this.mapInput(App.Strings.ReadOnly.distance, this.parent.distance)
+			this.mapInput(App.Strings.ReadOnly.rate, this.parent.rate)
 		}
 		
 		addMenuOption(labelPattern, defaultValue := "") {
@@ -525,23 +531,31 @@ class App {
 	}
 	
 	class Strings {	
-		static speedThreshold := "speedThreshold"
-		static timeThreshold := "timeThreshold"
-		static timeDial := "timeDial"
-		static distance := "distance"
-		static rate := "rate"
-	
-		static currentCheckboxState := "currentCheckboxState"
-		static currentSpeedThreshold := "currentSpeedThreshold"
-		static currentTimeThreshold := "currentTimeThreshold"
-		static currentTimeDial := "currentTimeDial"
-		static currentDistance := "currentDistance"
-		static currentRate := "currentDistance"
+
+		static skipStartupDialog := "skipStartupDialog"
 		
-		static readOnlySpeedThreshold := "readOnlySpeedThreshold"
-		static readOnlyTimeThreshold := "readOnlyTimeThreshold"
-		static readOnlyTimeDial := "readOnlyTimeDial"
-		static readOnlyDistance := "readOnlyDistance"
-		static readOnlyRate := "readOnlyRate"
+		class Params {
+			static speedThreshold := "speedThreshold"
+			static timeThreshold := "timeThreshold"
+			static timeDial := "timeDial"
+			static distance := "distance"
+			static rate := "rate"
+		}	
+
+		static _ := App.Strings.Current := new App.Strings.Current()
+		class Current extends App.Strings.Params {
+			static checkboxState := "checkboxState"
+
+			__Get(vKey) {
+				return "current" . vKey
+			}
+		}
+		
+		static __ := App.Strings.ReadOnly := new App.Strings.ReadOnly()
+		class ReadOnly extends App.Strings.Params {
+			__Get(vKey) {
+				return "readOnly" . vKey
+			}
+		}
 	}
 }
