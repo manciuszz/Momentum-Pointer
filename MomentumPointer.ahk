@@ -51,7 +51,13 @@ class App {
 		this.rateOffset := Round(this.rate * (1000000 / this.getFreqCount), 3)
 		
 		this.monitorSleepTime := 25
+		this.suspendedStateSleepInterval := 1000
 
+		App.Icon.setup(this)
+
+		if (true)
+			this.touchpadSettings := new App.Touchpad(this)
+			
 		if !(this.skipStartupDialog)
 			this.guiInstance := new App.GUI(this)
 			
@@ -155,11 +161,16 @@ class App {
 		this.ArrayX0 := this.ArrayY0 := this.ArrayX1 := this.ArrayY1 := this.ArrayX2 := this.ArrayY2 := 0
 	}
 	
-	_startMonitoring() {	
-		velocityMonitor:
+	_startMonitoring() {
+		velocityMonitor:				
 			App.Utility.CleanMemory()
 			; Velocity Loop - pointer movement monitor.
 			Loop {
+				if (this.forceExit) {
+					Sleep, % this.suspendedStateSleepInterval
+					continue
+				}
+				
 				Sleep, -1
 				App.Utility.DllSleep(this.monitorSleepTime)
 				
@@ -208,6 +219,10 @@ class App {
 			this.Array2 := this.Array1 := this.Array0 := 0  
 			; Gliding Loop - pointer glide.
 			Loop {
+				if (this.forceExit) {
+					Sleep, % this.suspendedStateSleepInterval
+					continue
+				}
 				App.Utility.DllSleep(1)
 				; Calculate elapsed time from Velocity Loop exit and simulate inertial pointer displacement.
 				this.cT0 := App.Utility.GetTickCount()
@@ -232,15 +247,16 @@ class App {
 		if !(App.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
 			MsgBox, RegisterRawInputDevices failure.
 		
-		Menu, Tray, Icon, % "HICON:*" this.hICon
-		TrayTip, % this.appName, Enabled, 0, 0
+		if (!A_IsSuspended) {			
+			Menu, Tray, Icon, % "HICON:*" this.hICon
+			TrayTip, % this.appName, Enabled, 0, 0
+		}			
 
 		DllCall("Winmm\timeBeginPeriod", "UInt", this.TimePeriod) ; Provide adequate resolution for Sleep.
 		this._startMonitoring()
 	}
 	
 	setup() {
-		this.Icon.setup(this)
 		this._initSettings()
 		this._initOSPointerSettings()
 		this._initVariables()
@@ -528,6 +544,81 @@ class App {
 			return outputVar
 		}
 		
+	}
+	
+	class Touchpad {
+		static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
+		static enumRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Enum\HID\"
+
+		__New(parentInstance) {
+			this.parent := parentInstance
+			
+			this.PrecisionTouchpad.toggleState("Disabled")
+			
+			this.onDeviceChange()
+			OnMessage(0x219, ObjBindMethod(this, "onDeviceChange"))
+		}
+		
+		onDeviceChange() {
+			mouseDevices := this._identifyMouseDevices()
+			
+			; In most cases, laptops has a touchpad, so the length would always be 1... meanwhile connecting a USB device should obviously increase the value.
+			this._suspender(mouseDevices.length > 1) ; Note: This might not work for everyone Q.Q needs further testing/solution
+		}
+		
+		_suspender(condition) {
+			if (condition)
+				this.parent.Icon.pause()
+			else if (!condition && this.parent.forceExit != "")
+				this.parent.Icon.resume()
+			Suspend, % (condition ? "On" : "Off")
+			this.parent.forceExit := condition
+		}
+		
+		_identifyMouseDevices() {
+			mouseMap := {}
+			
+			RegRead, mouseDeviceCount, % this.mouhidRegPath, Count
+			if (mouseDeviceCount > 0) {
+				Loop % mouseDeviceCount {				
+					mouseID := A_Index - 1
+					RegRead, deviceHID, % this.mouhidRegPath, % mouseID
+					deviceHID := StrSplit(deviceHID, "\").2
+					Loop, Reg, % this.enumRegPath . deviceHID, K 
+					{
+						if (A_LoopRegName) {
+							RegRead, deviceDescription, % this.enumRegPath . deviceHID . "\" . A_LoopRegName, DeviceDesc
+							mouseMap[mouseID] := deviceDescription
+							break							
+						}
+					}
+				}
+			}
+			mouseMap.length := mouseDeviceCount
+			return mouseMap
+		}
+		
+		class PrecisionTouchpad {		
+			static regPath := "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad"
+			
+			getState() {
+				RegRead, leaveOnWithMouse, % this.regPath, LeaveOnWithMouse
+				return leaveOnWithMouse
+			}
+			
+			toggleState(state := "Enabled") {
+				stateMap := { "Enabled": 0xffffffff, "Disabled": 0 }
+				RegWrite, REG_DWORD, % this.regPath, LeaveOnWithMouse, % stateMap[state]
+			}
+		}
+		
+		; class ElanTouchpad {
+		
+		; }
+		
+		; class SynapticsTouchpad {
+		
+		; }
 	}
 	
 	class Strings {	
