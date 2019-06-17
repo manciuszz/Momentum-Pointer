@@ -553,7 +553,7 @@ class App {
 		__New(parentInstance) {
 			this.parent := parentInstance
 			
-			this.PrecisionTouchpad.toggleState("Disabled")
+			; this.PrecisionTouchpad.toggleState("Enabled")
 			
 			this.onDeviceChange()
 			OnMessage(0x219, ObjBindMethod(this, "onDeviceChange"))
