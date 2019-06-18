@@ -1,6 +1,7 @@
 ; #Warn
 #NoEnv
 #Persistent
+; #MaxThreads 2
 #SingleInstance Force
 Critical 1000000000000000
 SetFormat, FloatFast, 0.11
@@ -55,8 +56,10 @@ class App {
 
 		App.Icon.setup(this)
 
-		if (true)
+		if (true) {
+			this.reEnableTrackpadInterval := 500
 			this.touchpadSettings := new App.Touchpad(this)
+		}
 			
 		if !(this.skipStartupDialog)
 			this.guiInstance := new App.GUI(this)
@@ -161,16 +164,30 @@ class App {
 		this.ArrayX0 := this.ArrayY0 := this.ArrayX1 := this.ArrayY1 := this.ArrayX2 := this.ArrayY2 := 0
 	}
 	
+	shouldRestoreCriticalState(stackTrace, isCritical := "") {
+		if (stackTrace == "typingSuspender") {
+			this.madeCritical := true
+		} else if (this.madeCritical && isCritical == 0 && stackTrace == "velocityMonitor") {
+			this.madeCritical := false
+			return true
+		}
+		return this.madeCritical
+	}
+	
 	_startMonitoring() {
-		velocityMonitor:				
+		velocityMonitor:		
 			App.Utility.CleanMemory()
 			; Velocity Loop - pointer movement monitor.
 			Loop {
+				if (this.shouldRestoreCriticalState("velocityMonitor", A_IsCritical)) {
+					Critical 1000000000000000
+				}
+				
 				if (this.forceExit) {
 					Sleep, % this.suspendedStateSleepInterval
 					continue
 				}
-				
+								
 				Sleep, -1
 				App.Utility.DllSleep(this.monitorSleepTime)
 				
@@ -242,7 +259,7 @@ class App {
 	
 	_main() {
 		OnExit(ObjBindMethod(this.Icon, "exitFn")) ; Register a function to be called on exit.
-		OnMessage(0x111, ObjBindMethod(this.Icon, "changeOnMsg"))
+		OnMessage((WM_COMMAND := 0x111), ObjBindMethod(this.Icon, "changeOnMsg"))
 		
 		if !(App.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
 			MsgBox, RegisterRawInputDevices failure.
@@ -553,23 +570,28 @@ class App {
 		__New(parentInstance) {
 			this.parent := parentInstance
 			
-			; this.PrecisionTouchpad.toggleState("Enabled")
+			; this.PrecisionTouchpad.toggleState("Disabled")
 			
 			this.onDeviceChange()
-			OnMessage(0x219, ObjBindMethod(this, "onDeviceChange"))
+			OnMessage((WM_DEVICECHANGE := 0x219), ObjBindMethod(this, "onDeviceChange"))
+			
+			if (this.parent.reEnableTrackpadInterval > 0)
+				new this.TypingSuspender(this)
 		}
 		
 		onDeviceChange() {
 			mouseDevices := this._identifyMouseDevices()
 			
 			; In most cases, laptops has a touchpad, so the length would always be 1... meanwhile connecting a USB device should obviously increase the value.
-			this._suspender(mouseDevices.length > 1) ; Note: This might not work for everyone Q.Q needs further testing/solution
+			this.externalDevicesConnected := mouseDevices.length > 1
+			
+			this._suspender(this.externalDevicesConnected) ; Note: This might not work for everyone Q.Q needs further testing/solution
 		}
 		
 		_suspender(condition) {
-			if (condition)
+			if (condition && !A_IsSuspended)
 				this.parent.Icon.pause()
-			else if (!condition && this.parent.forceExit != "")
+			else if (!condition && this.parent.forceExit)
 				this.parent.Icon.resume()
 			Suspend, % (condition ? "On" : "Off")
 			this.parent.forceExit := condition
@@ -606,7 +628,7 @@ class App {
 				return leaveOnWithMouse
 			}
 			
-			toggleState(state := "Enabled") {
+			toggleState(state := "Enabled") { ; This tweak requires a PC restart or sign-in/out to take effect... Need a new solution!
 				stateMap := { "Enabled": 0xffffffff, "Disabled": 0 }
 				RegWrite, REG_DWORD, % this.regPath, LeaveOnWithMouse, % stateMap[state]
 			}
@@ -619,6 +641,59 @@ class App {
 		; class SynapticsTouchpad {
 		
 		; }
+		
+		class TypingSuspender {
+			
+			__New(parentInstance) {
+				this.touchpad := parentInstance
+				OnExit(ObjBindMethod(this, "unHook")) ; Register a function to be called on exit.
+				
+				this.reEnableTrackpadMethod := ObjBindMethod(this, "reEnableTrackpad")
+				this.hHookKeybd := this.setWindowsHookEx((WH_KEYBOARD_LL := 13), RegisterCallback(this.keyboard.name, "Fast", "", &this))
+			}
+			
+			reEnableTrackpad() {
+				BlockInput, MouseMoveOff
+				this.touchpad.parent.shouldRestoreCriticalState("typingSuspender")
+			}
+			
+			unHook() {
+				this.unhookWindowsHookEx(this.hHookKeybd)
+			}
+			
+			toggleTimer(timerFunc, state, priority := 0) {
+				SetTimer, % timerFunc, % state, % priority
+			}
+			
+			keyboard(nCode, wParam, lParam) {
+				lParam := wParam
+				wParam := nCode
+				nCode := this
+				this := Object(A_EventInfo)
+				
+				if (this.touchpad.externalDevicesConnected)
+					return
+								
+				if (!nCode) {
+					Critical Off
+					BlockInput, MouseMove
+					this.toggleTimer(this.reEnableTrackpadMethod, this.touchpad.parent.reEnableTrackpadInterval)
+				}
+				return this.callNextHookEx(nCode, wParam, lParam)
+			}
+			
+			setWindowsHookEx(idHook, pfn) {
+			   return DllCall("SetWindowsHookEx", "int", idHook, "Uint", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0), "Uint", 0)
+			}
+			
+			unhookWindowsHookEx(hHook) {
+			   return DllCall("UnhookWindowsHookEx", "Uint", hHook)
+			}
+			
+			callNextHookEx(nCode, wParam, lParam, hHook = 0) {
+			   return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
+			}	
+		}
 	}
 	
 	class Strings {	
@@ -633,8 +708,9 @@ class App {
 			static rate := "rate"
 		}	
 
-		static _ := App.Strings.ActiveField := new App.Strings.ActiveField()
 		class ActiveField extends App.Strings.Params {
+			static _ := App.Strings.ActiveField := new App.Strings.ActiveField()
+			
 			static checkboxState := "checkboxState"
 
 			__Get(vKey) {
@@ -642,8 +718,9 @@ class App {
 			}
 		}
 		
-		static __ := App.Strings.ReadOnlyField := new App.Strings.ReadOnlyField()
 		class ReadOnlyField extends App.Strings.Params {
+			static _ := App.Strings.ReadOnlyField := new App.Strings.ReadOnlyField()
+			
 			__Get(vKey) {
 				return "readOnlyField" . vKey
 			}
