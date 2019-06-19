@@ -25,7 +25,7 @@ if (true) {
 class App {
 	; static _ := App := new App() ; Interesting fact?: This makes AHK Loop run slow for whatever reason...
 	
-	__Init() {
+	__Init() {		
 		this.appName := "Momentum Pointer"
 		this.iniFile := "config.ini"
 		this.version := "2.0"
@@ -56,11 +56,12 @@ class App {
 
 		App.Icon.setup(this)
 
-		if (true) {
-			this.reEnableTrackpadInterval := 500 ; Value <= 0 will disable the feature completely.
+		if (true) { ; This is super experimental stuff at the moment...		
+			this.shouldPreventTouchpadChanges := false
+			this.reEnableTouchpadInterval := 500 ; Value <= 0 will disable the feature completely.
 			this.touchpadSettings := new App.Touchpad(this)
 		}
-			
+		
 		if !(this.skipStartupDialog)
 			this.guiInstance := new App.GUI(this)
 			
@@ -339,6 +340,14 @@ class App {
 	}
 	
 	class Utility {	
+		RunSelfAsAdministrator() {
+			if not A_IsAdmin {
+				Run *RunAs "%A_ScriptFullPath%"
+				ExitApp
+			}
+			return A_IsAdmin
+		}
+	
 		GetMousePos2D(byRef x0, byRef y0) {
 			static _POINTER := false
 			if (!_POINTER) {
@@ -447,7 +456,7 @@ class App {
 			DllCall("CloseHandle", "Int", hWnd)
 		}
 		
-		stdOutStream( sCmd, Callback := "", WorkingDir:=0, ByRef ProcessID:=0) {
+		StdOutStream(sCmd, Callback := "", WorkingDir := 0, ByRef ProcessID := 0) {
 		   Static StrGet := "StrGet"
 		   tcWrk := WorkingDir=0 ? "Int" : "Str"
 		   DllCall( "CreatePipe", UIntP,hPipeRead, UIntP,hPipeWrite, UInt,0, UInt,0 )
@@ -501,8 +510,8 @@ class App {
 		   Return IsFunc( Callback ) ? %Callback%( "", 0 ) : sOutput
 		}
 		
-		evalPowershell(psScript) {
-			return this.stdOutStream("powershell.exe -ExecutionPolicy Bypass -Command &{" . psScript . "}")
+		EvalPowershell(psScript) {
+			return this.StdOutStream("powershell.exe -ExecutionPolicy Bypass -Command &{" . psScript . "}")
 		}
 	}
 	
@@ -624,28 +633,37 @@ class App {
 	}
 	
 	class Touchpad {
-		static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
-		static enumRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Enum\HID\"
+		; static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
+		; static enumRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Enum\HID\"
 
 		__New(parentInstance) {
 			this.parent := parentInstance
 			
-			; this.PrecisionTouchpad.toggleState("Disabled")
-						
-			this.onDeviceChange()
-			OnMessage((WM_DEVICECHANGE := 0x219), ObjBindMethod(this, "onDeviceChange"))
+			this.PrecisionTouchPad.preventTouchpadChanges := (!this.PrecisionTouchPad.getLOWMRegistryState() || parentInstance.shouldPreventTouchpadChanges) 
+			if (!this.PrecisionTouchPad.preventTouchpadChanges)
+				if (!App.Utility.RunSelfAsAdministrator())
+					return
+
+			if (App.Utility.EvalPowershell("echo 1")) { ; Check to see if we can actually use PowerShell...
+				this.onDeviceChange()
+				OnMessage((WM_DEVICECHANGE := 0x219), ObjBindMethod(this, "onDeviceChange"))
+			}			
 			
-			if (this.parent.reEnableTrackpadInterval > 0)
+			if (parentInstance.reEnableTouchpadInterval > 0 && this.PrecisionTouchPad.preventTouchpadChanges)
 				new this.TypingSuspender(this)
 		}              
-
+		
+		_restoreOnExit() {
+			this.PrecisionTouchpad.setTouchpadState("Enabled")
+		}
+		
 		_identifyMouseDevices() {
 			psScript =
 			(
 				$PNPMice = Get-WmiObject Win32_USBControllerDevice | `% {[wmi]$_.dependent} | ?{$_.pnpclass -eq 'Mouse'}
 				$PNPMice | `% { $_.Name }
 			)
-			myDevices := App.Utility.evalPowershell(psScript)
+			myDevices := App.Utility.EvalPowershell(psScript)
 			return StrSplit(myDevices, "`n").MaxIndex() - 1 > 0 ; Note -1 is due to the output always having a new line at the end...
 		}
 
@@ -656,8 +674,17 @@ class App {
 			; this.externalDevicesConnected := mouseDevices.length > 1
 			
 			this.externalDevicesConnected := this._identifyMouseDevices()
+					
+			if (!this.PrecisionTouchPad.preventTouchpadChanges) {
+				if (this.externalDevicesConnected && this.PrecisionTouchpad.getTouchpadState()) {
+					this.PrecisionTouchpad.setTouchpadState("Disabled")
+					OnExit(ObjBindMethod(this, "_restoreOnExit"))
+				} else if (!this.externalDevicesConnected) {
+					this.PrecisionTouchpad.setTouchpadState("Enabled")
+				}
+			}
 
-			this._suspender(this.externalDevicesConnected) ; Note: This might not work for everyone Q.Q needs further testing/solution
+			this._suspender(this.externalDevicesConnected)
 		}
 		
 		_suspender(condition) {
@@ -669,7 +696,7 @@ class App {
 			this.parent.forceExit := condition
 		}
 		
-		; _identifyMouseDevices() {
+		; _identifyMouseDevices() { ; Note: Not sure how good is this method of mouse detection, otherwise I'd prefer this..
 			; mouseMap := {}
 			
 			; RegRead, mouseDeviceCount, % this.mouhidRegPath, Count
@@ -692,17 +719,47 @@ class App {
 			; return mouseMap
 		; }
 		
-		class PrecisionTouchpad {		
+		class PrecisionTouchpad {
 			static regPath := "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad"
 			
-			getState() {
+			getLOWMRegistryState() {
 				RegRead, leaveOnWithMouse, % this.regPath, LeaveOnWithMouse
 				return leaveOnWithMouse
 			}
 			
-			toggleState(state := "Enabled") { ; This tweak requires a PC restart or sign-in/out to take effect... Need a new solution!
-				stateMap := { "Enabled": 0xffffffff, "Disabled": 0 }
-				RegWrite, REG_DWORD, % this.regPath, LeaveOnWithMouse, % stateMap[state]
+			setLOWMRegistryState(state := "Disabled") { ; This tweak requires a PC restart or sign-in/out to take effect... Need a new solution!
+				if (this.getLOWMRegistryState() != "") {
+					stateMap := { "Enabled": 0xffffffff, "Disabled": 0 }
+					RegWrite, REG_DWORD, % this.regPath, LeaveOnWithMouse, % stateMap[state]
+				}				
+			}
+		
+			getTouchpadState() {
+				psScript = 
+				(
+					$Touchpad = Get-PnpDevice | `% { if ($_.FriendlyName -match 'TouchPad|Touch Pad') { $_ } }
+					if ($Touchpad.Status -eq 'OK') { 1 } else { 0 }
+				)
+				return App.Utility.EvalPowershell(psScript)
+			}
+			
+			setTouchpadState(forceState := "Enabled") {
+				if (!A_IsAdmin && !this.preventTouchpadChanges) {
+					MsgBox, Need 'Administrator' user rights to use 'PrecisionTouchPad.setTouchpadState' method!
+					return
+				}
+					
+				if (this.preventTouchpadChanges)
+					return
+					
+				setState := ({ "Enabled": "Enable", "Disabled": "Disable" })[forceState]
+				psScript = 
+				(
+					$Touchpad = Get-PnpDevice | `% { if ($_.FriendlyName -match 'TouchPad|Touch Pad') { $_ } }
+					$HID = $Touchpad.InstanceId
+					%setState%-PnpDevice -InstanceId $HID -Confirm:$false
+				)
+				App.Utility.EvalPowershell(psScript)
 			}
 		}
 		
@@ -720,11 +777,11 @@ class App {
 				this.touchpad := parentInstance
 				OnExit(ObjBindMethod(this, "unHook")) ; Register a function to be called on exit.
 				
-				this.reEnableTrackpadMethod := ObjBindMethod(this, "reEnableTrackpad")
+				this.reEnableTouchpadMethod := ObjBindMethod(this, "reEnableTouchpad")
 				this.hHookKeybd := this.setWindowsHookEx((WH_KEYBOARD_LL := 13), RegisterCallback(this.keyboard.name, "Fast", "", &this))
 			}
 			
-			reEnableTrackpad() {
+			reEnableTouchpad() {
 				BlockInput, MouseMoveOff
 				this.touchpad.parent.shouldRestoreCriticalState("typingSuspender")
 			}
@@ -749,7 +806,7 @@ class App {
 				if (!nCode) {
 					Critical Off
 					BlockInput, MouseMove
-					this.toggleTimer(this.reEnableTrackpadMethod, this.touchpad.parent.reEnableTrackpadInterval)
+					this.toggleTimer(this.reEnableTouchpadMethod, this.touchpad.parent.reEnableTouchpadInterval)
 				}
 				return this.callNextHookEx(nCode, wParam, lParam)
 			}
