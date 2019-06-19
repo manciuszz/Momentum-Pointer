@@ -57,7 +57,7 @@ class App {
 		App.Icon.setup(this)
 
 		if (true) {
-			this.reEnableTrackpadInterval := 500
+			this.reEnableTrackpadInterval := 500 ; Value <= 0 will disable the feature completely.
 			this.touchpadSettings := new App.Touchpad(this)
 		}
 			
@@ -66,6 +66,23 @@ class App {
 			
 		if !(this.guiInstance)
 			this.setup()
+	}
+	
+	setup() {
+		this._initSettings()
+		this._initOSPointerSettings()
+		this._initVariables()
+		this._main()
+	}
+
+	shouldRestoreCriticalState(stackTrace, isCritical := "") {
+		if (stackTrace == "typingSuspender") {
+			this.madeCritical := true
+		} else if (this.madeCritical && isCritical == 0 && stackTrace == "velocityMonitor") {
+			this.madeCritical := false
+			return true
+		}
+		return this.madeCritical
 	}
 	
 	_initSettings() {
@@ -163,17 +180,7 @@ class App {
 		; Velocity components
 		this.ArrayX0 := this.ArrayY0 := this.ArrayX1 := this.ArrayY1 := this.ArrayX2 := this.ArrayY2 := 0
 	}
-	
-	shouldRestoreCriticalState(stackTrace, isCritical := "") {
-		if (stackTrace == "typingSuspender") {
-			this.madeCritical := true
-		} else if (this.madeCritical && isCritical == 0 && stackTrace == "velocityMonitor") {
-			this.madeCritical := false
-			return true
-		}
-		return this.madeCritical
-	}
-	
+		
 	_startMonitoring() {
 		velocityMonitor:		
 			App.Utility.CleanMemory()
@@ -272,14 +279,7 @@ class App {
 		DllCall("Winmm\timeBeginPeriod", "UInt", this.TimePeriod) ; Provide adequate resolution for Sleep.
 		this._startMonitoring()
 	}
-	
-	setup() {
-		this._initSettings()
-		this._initOSPointerSettings()
-		this._initVariables()
-		this._main()
-	}
-	
+		
 	class Icon {	
 		setup(parentInstance) {
 			this.parent := parentInstance
@@ -419,7 +419,7 @@ class App {
 				return false
 			if (Flags & 0x01) ; for RIDEV_REMOVE you must call RI_UnRegisterDevices()
 				return false
-			StructSize := 8 + A_PtrSize ; size of a RAWINPUTDEVICE structure
+			
 			; Usage has to be zero in case of RIDEV_PAGEONLY, flags must include RIDEV_PAGEONLY if Usage is zero.
 			if ((Flags & 0x30) = 0x20)
 				Usage := 0
@@ -430,6 +430,8 @@ class App {
 				HGUI := 0
 			else if (HGUI = "")
 				HGUI := A_ScriptHwnd
+				
+			StructSize := 8 + A_PtrSize ; size of a RAWINPUTDEVICE structure
 			VarSetCapacity(RID, StructSize, 0) ; RAWINPUTDEVICE structure
 			NumPut(Page, RID, 0, "UShort")
 			NumPut(Usage, RID, 2, "UShort")
@@ -443,6 +445,64 @@ class App {
 			hWnd := DllCall("OpenProcess", "UInt", 0x001F0FFF, "Int", 0, "Int", PID)
 			DllCall("SetProcessWorkingSetSize", "UInt", hWnd, "Int", -1, "Int", -1)
 			DllCall("CloseHandle", "Int", hWnd)
+		}
+		
+		stdOutStream( sCmd, Callback := "", WorkingDir:=0, ByRef ProcessID:=0) {
+		   Static StrGet := "StrGet"
+		   tcWrk := WorkingDir=0 ? "Int" : "Str"
+		   DllCall( "CreatePipe", UIntP,hPipeRead, UIntP,hPipeWrite, UInt,0, UInt,0 )
+		   DllCall( "SetHandleInformation", UInt,hPipeWrite, UInt,1, UInt,1 )
+		   if A_PtrSize = 8
+		   {
+			  VarSetCapacity( STARTUPINFO, 104, 0  )   
+			  NumPut( 68,         STARTUPINFO,  0 )    
+			  NumPut( 0x100,      STARTUPINFO, 60 )    
+			  NumPut( hPipeWrite, STARTUPINFO, 88 )    
+			  NumPut( hPipeWrite, STARTUPINFO, 96 )    
+			  VarSetCapacity( PROCESS_INFORMATION, 24 )
+		   } else {
+			  VarSetCapacity( STARTUPINFO, 68, 0  )
+			  NumPut( 68,         STARTUPINFO,  0 )
+			  NumPut( 0x100,      STARTUPINFO, 44 )
+			  NumPut( hPipeWrite, STARTUPINFO, 60 )
+			  NumPut( hPipeWrite, STARTUPINFO, 64 )
+			  VarSetCapacity( PROCESS_INFORMATION, 16 )
+		   }
+		   
+		   if ! DllCall( "CreateProcess", UInt,0, UInt,&sCmd, UInt,0, UInt, 0, UInt,1, UInt,0x08000000, UInt,0, tcWrk, WorkingDir, UInt,&STARTUPINFO, UInt,&PROCESS_INFORMATION ) {
+			  DllCall( "CloseHandle", UInt,hPipeWrite ) 
+			  DllCall( "CloseHandle", UInt,hPipeRead )
+			  DllCall( "SetLastError", Int,-1 )     
+			  Return ""
+		   }
+		   
+		   hProcess := NumGet( PROCESS_INFORMATION, 0 )                 
+		   hThread  := NumGet( PROCESS_INFORMATION, A_PtrSize )  
+		   ProcessID:= NumGet( PROCESS_INFORMATION, A_PtrSize*2 )  
+		   
+		   DllCall( "CloseHandle", UInt,hPipeWrite )
+		   
+		   AIC := ( SubStr( A_AhkVersion, 1, 3 ) = "1.0" )
+		   VarSetCapacity( Buffer, 4096, 0 ), nSz := 0 
+		   
+		   while DllCall( "ReadFile", UInt,hPipeRead, UInt,&Buffer, UInt,4094, UIntP,nSz, Int,0 ) {
+			  tOutput := ( AIC && NumPut( 0, Buffer, nSz, "Char" ) && VarSetCapacity( Buffer,-1 ) ) ? Buffer : %StrGet%( &Buffer, nSz, "CP0" )
+			  IsFunc( Callback ) ? %Callback%( tOutput, A_Index ) : sOutput .= tOutput
+		   }                   
+		   
+		   DllCall( "GetExitCodeProcess", UInt,hProcess, UIntP,ExitCode )
+		   DllCall( "CloseHandle",  UInt,hProcess  )
+		   DllCall( "CloseHandle",  UInt,hThread   )
+		   DllCall( "CloseHandle",  UInt,hPipeRead )
+		   DllCall( "SetLastError", UInt,ExitCode  )
+		   VarSetCapacity(STARTUPINFO, 0)
+		   VarSetCapacity(PROCESS_INFORMATION, 0)
+		   
+		   Return IsFunc( Callback ) ? %Callback%( "", 0 ) : sOutput
+		}
+		
+		evalPowershell(psScript) {
+			return this.stdOutStream("powershell.exe -ExecutionPolicy Bypass -Command &{" . psScript . "}")
 		}
 	}
 	
@@ -571,20 +631,32 @@ class App {
 			this.parent := parentInstance
 			
 			; this.PrecisionTouchpad.toggleState("Disabled")
-			
+						
 			this.onDeviceChange()
 			OnMessage((WM_DEVICECHANGE := 0x219), ObjBindMethod(this, "onDeviceChange"))
 			
 			if (this.parent.reEnableTrackpadInterval > 0)
 				new this.TypingSuspender(this)
+		}              
+
+		_identifyMouseDevices() {
+			psScript =
+			(
+				$PNPMice = Get-WmiObject Win32_USBControllerDevice | `% {[wmi]$_.dependent} | ?{$_.pnpclass -eq 'Mouse'}
+				$PNPMice | `% { $_.Name }
+			)
+			myDevices := App.Utility.evalPowershell(psScript)
+			return StrSplit(myDevices, "`n").MaxIndex() - 1 > 0 ; Note -1 is due to the output always having a new line at the end...
 		}
-		
-		onDeviceChange() {
-			mouseDevices := this._identifyMouseDevices()
+
+		onDeviceChange() {			
+			; mouseDevices := this._identifyMouseDevices()
 			
 			; In most cases, laptops has a touchpad, so the length would always be 1... meanwhile connecting a USB device should obviously increase the value.
-			this.externalDevicesConnected := mouseDevices.length > 1
+			; this.externalDevicesConnected := mouseDevices.length > 1
 			
+			this.externalDevicesConnected := this._identifyMouseDevices()
+
 			this._suspender(this.externalDevicesConnected) ; Note: This might not work for everyone Q.Q needs further testing/solution
 		}
 		
@@ -597,28 +669,28 @@ class App {
 			this.parent.forceExit := condition
 		}
 		
-		_identifyMouseDevices() {
-			mouseMap := {}
+		; _identifyMouseDevices() {
+			; mouseMap := {}
 			
-			RegRead, mouseDeviceCount, % this.mouhidRegPath, Count
-			if (mouseDeviceCount > 0) {
-				Loop % mouseDeviceCount {				
-					mouseID := A_Index - 1
-					RegRead, deviceHID, % this.mouhidRegPath, % mouseID
-					deviceHID := StrSplit(deviceHID, "\").2
-					Loop, Reg, % this.enumRegPath . deviceHID, K 
-					{
-						if (A_LoopRegName) {
-							RegRead, deviceDescription, % this.enumRegPath . deviceHID . "\" . A_LoopRegName, DeviceDesc
-							mouseMap[mouseID] := deviceDescription
-							break							
-						}
-					}
-				}
-			}
-			mouseMap.length := mouseDeviceCount
-			return mouseMap
-		}
+			; RegRead, mouseDeviceCount, % this.mouhidRegPath, Count
+			; if (mouseDeviceCount > 0) {
+				; Loop % mouseDeviceCount {				
+					; mouseID := A_Index - 1
+					; RegRead, deviceHID, % this.mouhidRegPath, % mouseID
+					; deviceHID := StrSplit(deviceHID, "\").2
+					; Loop, Reg, % this.enumRegPath . deviceHID, K 
+					; {
+						; if (A_LoopRegName) {
+							; RegRead, deviceDescription, % this.enumRegPath . deviceHID . "\" . A_LoopRegName, DeviceDesc
+							; mouseMap[mouseID] := deviceDescription
+							; break							
+						; }
+					; }
+				; }
+			; }
+			; mouseMap.length := mouseDeviceCount
+			; return mouseMap
+		; }
 		
 		class PrecisionTouchpad {		
 			static regPath := "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad"
