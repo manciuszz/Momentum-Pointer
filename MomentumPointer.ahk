@@ -31,20 +31,21 @@ class App {
 		this.configSectionName := "MomentumParameters"
 		
 		; Defaults Values
-		this.speedThreshold := 35
-		this.timeThreshold := 1055
-		this.timeDial := 1007500
-		this.distance := 0.665
-		this.rate := -0.71575335
+		this.defaults := {}
+		this.defaults.speedThreshold := 35
+		this.defaults.timeThreshold := 1055
+		this.defaults.timeDial := 1007500
+		this.defaults.distance := 0.665
+		this.defaults.rate := -0.71575335
 		
 		getParamFromConfig := ObjBindMethod(App.Utility, "GetParamFromIni", this.iniFile, this.configSectionName)	
 		this.skipStartupDialog := GetKeyState("CapsLock", "T") ? 0 : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
 		
-		this.speedThreshold := %getParamFromConfig%(App.Strings.Params.speedThreshold, this.speedThreshold)
-		this.timeThreshold := %getParamFromConfig%(App.Strings.Params.timeThreshold, this.timeThreshold)
-		this.timeDial := %getParamFromConfig%(App.Strings.Params.timeDial, this.timeDial)
-		this.distance := %getParamFromConfig%(App.Strings.Params.distance, this.distance)
-		this.rate := %getParamFromConfig%(App.Strings.Params.rate, this.rate)
+		this.speedThreshold := %getParamFromConfig%(App.Strings.Params.speedThreshold, this.defaults.speedThreshold)
+		this.timeThreshold := %getParamFromConfig%(App.Strings.Params.timeThreshold, this.defaults.timeThreshold)
+		this.timeDial := %getParamFromConfig%(App.Strings.Params.timeDial, this.defaults.timeDial)
+		this.distance := %getParamFromConfig%(App.Strings.Params.distance, this.defaults.distance)
+		this.rate := %getParamFromConfig%(App.Strings.Params.rate, this.defaults.rate)
 
 		this.getFreqCount := App.Utility.GetFrequencyCounter()
 		this.rateOffset := Round(this.rate * (1000000 / this.getFreqCount), 3)
@@ -584,11 +585,11 @@ class App {
 		}
 		
 		addLabels() {
-			this.addMenuOption("Lower for easier gliding (defaultPlaceholder).`t`t`tAverage speed threshold:", this.parent.speedThreshold)
-			this.addMenuOption("Lower for larger deadzone (defaultPlaceholder).`t`t`tAbsolute time limit:", this.parent.timeThreshold)
-			this.addMenuOption("Lower for faster gliding (defaultPlaceholder).`t`tTime dial:", this.parent.timeDial)
-			this.addMenuOption("Lower for shorter gliding (defaultPlaceholder).`t`t`tGlide distance:", this.parent.distance)
-			this.addMenuOption("Lower for constant acceleration (defaultPlaceholder).`tGlide rate:", this.parent.rate)
+			this.addMenuOption("Lower for easier gliding (defaultPlaceholder).`t`t`tAverage speed threshold:", this.parent.defaults.speedThreshold)
+			this.addMenuOption("Lower for larger deadzone (defaultPlaceholder).`t`t`tAbsolute time limit:", this.parent.defaults.timeThreshold)
+			this.addMenuOption("Lower for faster gliding (defaultPlaceholder).`t`tTime dial:", this.parent.defaults.timeDial)
+			this.addMenuOption("Lower for shorter gliding (defaultPlaceholder).`t`t`tGlide distance:", this.parent.defaults.distance)
+			this.addMenuOption("Lower for constant acceleration (defaultPlaceholder).`tGlide rate:", this.parent.defaults.rate)
 			this.addMenuOption("Disable Startup Dialog:")
 		}
 		
