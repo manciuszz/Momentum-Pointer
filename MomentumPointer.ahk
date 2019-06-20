@@ -9,13 +9,12 @@ ListLines, Off
 ; SetBatchLines, -1 ; "Determines how fast a script will run (affects CPU utilization)."
 
 if (true) {
-	AttachDebugger := false
-	if (AttachDebugger && WinExist("ahk_exe notepad++.exe")) {
+	if ((AttachDebugger := false) && WinExist("ahk_exe notepad++.exe")) {
 		hiddenWindowState := A_DetectHiddenWindows
 		DetectHiddenWindows, On
 		if WinExist(A_ScriptFullPath " ahk_class AutoHotkey")
 			PostMessage DllCall("RegisterWindowMessage", "str", "AHK_ATTACH_DEBUGGER")
-		DetectHiddenWindows, %hiddenWindowState%
+		DetectHiddenWindows, % hiddenWindowState
 	}
 	AutoStart := new App()
 	return
@@ -114,6 +113,7 @@ class App {
 		this.resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
 	}
 	
+	; Note that these settings seems to not have any effect on Precision Touchpad Q.Q
 	_initOSPointerSettings() {
 		;Restore to default any OS pointer settings and confirm OS pointer settings values.
 		SPI_GETMOUSESPEED = 0x70
@@ -122,11 +122,14 @@ class App {
 		SPI_SETMOUSE = 0x0004
 		MouseSpeed := "", lpParams := ""
 	
+		User32Module := DllCall("GetModuleHandle", Str, "user32", "Ptr")
+		SPIProc := DllCall("GetProcAddress", "Ptr", User32Module, "AStr", "SystemParametersInfoW", "Ptr")
+	
 		;Set mouse speed to default 10 and get value.
 		if (this.resetDefaults)
-			DllCall("SystemParametersInfo", UInt, SPI_SETMOUSESPEED, UInt, 0, Ptr, 10, UInt, 0)
+			DllCall(SPIProc, UInt, SPI_SETMOUSESPEED, UInt, 0, UInt, 10, UInt, 0)
 		
-		DllCall("SystemParametersInfo", UInt, SPI_GETMOUSESPEED, UInt, 0, UIntP, MouseSpeed, UInt, 0)
+		DllCall(SPIProc, UInt, SPI_GETMOUSESPEED, UInt, 0, UIntP, MouseSpeed, UInt, 0)
 		
 		; Set mouse acceleration to off and get values.
 		VarSetCapacity(vValue, 12, 0)
@@ -135,9 +138,9 @@ class App {
 		NumPut(0, lpParams, 8, "UInt")
 		
 		if (this.resetDefaults)
-			DllCall("SystemParametersInfo", UInt, SPI_SETMOUSE, UInt, 0, UInt, &vValue, UInt, 1)
+			DllCall(SPIProc, UInt, SPI_SETMOUSE, UInt, 0, UInt, &vValue, UInt, 1)
 		
-		DllCall("SystemParametersInfo", UInt, SPI_GETMOUSE, UInt, 0, UInt, &vValue, UInt, 0)
+		DllCall(SPIProc, UInt, SPI_GETMOUSE, UInt, 0, UInt, &vValue, UInt, 0)
 		acThr1 := NumGet(vValue, 0, "UInt")
 		acThr2 := NumGet(vValue, 4, "UInt")
 		acOn := NumGet(vValue, 8, "UInt") ;"Enhance pointer precision" setting
@@ -550,14 +553,30 @@ class App {
 		}
 		
 		saveButton() {
+			inputFieldValues := { 
+			(Join,
+				speedThreshold: this.getInputValue(App.Strings.ActiveField.speedThreshold)
+				timeThreshold: this.getInputValue(App.Strings.ActiveField.timeThreshold)
+				timeDial: this.getInputValue(App.Strings.ActiveField.timeDial)
+				distance: this.getInputValue(App.Strings.ActiveField.distance)
+				rate: this.getInputValue(App.Strings.ActiveField.rate)
+			)}
+			
+			for field, value in inputFieldValues {
+				if (!RegExMatch(value, "^\-?(((\d+)?\.)?[\d]+$)")) {
+					MsgBox % "Field '" . field . "' value " . value . " is invalid!"
+					return
+				}
+			}
+			
 			Gui, Submit
-		
+					
 			writeToConfig := ObjBindMethod(App.Utility, "SetParamToIni", this.parent.iniFile, this.parent.configSectionName)
-			this.parent.speedThreshold := %writeToConfig%(App.Strings.Params.speedThreshold, this.getInputValue(App.Strings.ActiveField.speedThreshold))
-			this.parent.timeThreshold := %writeToConfig%(App.Strings.Params.timeThreshold, this.getInputValue(App.Strings.ActiveField.timeThreshold))
-			this.parent.timeDial := %writeToConfig%(App.Strings.Params.timeDial, this.getInputValue(App.Strings.ActiveField.timeDial))
-			this.parent.distance := %writeToConfig%(App.Strings.Params.distance, this.getInputValue(App.Strings.ActiveField.distance))
-			this.parent.rate := %writeToConfig%(App.Strings.Params.rate, this.getInputValue(App.Strings.ActiveField.rate))
+			this.parent.speedThreshold := %writeToConfig%(App.Strings.Params.speedThreshold, inputFieldValues.speedThreshold)
+			this.parent.timeThreshold := %writeToConfig%(App.Strings.Params.timeThreshold, inputFieldValues.timeThreshold)
+			this.parent.timeDial := %writeToConfig%(App.Strings.Params.timeDial, inputFieldValues.timeDial)
+			this.parent.distance := %writeToConfig%(App.Strings.Params.distance, inputFieldValues.distance)
+			this.parent.rate := %writeToConfig%(App.Strings.Params.rate, inputFieldValues.rate)
 			
 			%writeToConfig%(App.Strings.skipStartupDialog, this.getInputValue(App.Strings.ActiveField.checkboxState))
 			
@@ -574,21 +593,21 @@ class App {
 		}
 		
 		addInputFields() {			
-			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.speedThreshold, "NewColumn")
-			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.timeThreshold)
-			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.timeDial)
-			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.distance)
-			this.editMenuOption("Edit", "Number", App.Strings.ActiveField.rate)
+			this.editMenuOption("Edit", "Text", App.Strings.ActiveField.speedThreshold, "NewColumn")
+			this.editMenuOption("Edit", "Text", App.Strings.ActiveField.timeThreshold)
+			this.editMenuOption("Edit", "Text", App.Strings.ActiveField.timeDial)
+			this.editMenuOption("Edit", "Text", App.Strings.ActiveField.distance)
+			this.editMenuOption("Edit", "Text", App.Strings.ActiveField.rate)
 			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.ActiveField.checkboxState)
 		}
 		
 		addReadonlyFields() {
 			ReadOnlyFLAG := true
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.speedThreshold, "NewColumn", ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.timeThreshold,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.timeDial,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.distance,, ReadOnlyFLAG)
-			this.editMenuOption("Edit", "Number", App.Strings.ReadOnlyField.rate,, ReadOnlyFLAG)
+			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.speedThreshold, "NewColumn", ReadOnlyFLAG)
+			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.timeThreshold,, ReadOnlyFLAG)
+			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.timeDial,, ReadOnlyFLAG)
+			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.distance,, ReadOnlyFLAG)
+			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.rate,, ReadOnlyFLAG)
 		}
 		
 		fillInputFields() {
@@ -616,7 +635,7 @@ class App {
 			GuiControl +g, Button1, % saveButtonFunc
 		}
 		
-		editMenuOption(controlType := "Edit", variableOptions := "Number", controlName := "", newColumn := "", readOnly := false) {
+		editMenuOption(controlType := "Edit", variableOptions := "Text", controlName := "", newColumn := "", readOnly := false) {
 			global
 			local controlCount := NumGet(&this.controlMap, 4 * A_PtrSize)
 			if !(controlCount)
@@ -661,7 +680,7 @@ class App {
 				new this.TypingSuspender(this)
 		}              
 		
-		_identifyMouseDevices() {
+		_identifyMouseDevices() { ; Note: It's a little slow for my liking, but gets the job done nonetheless....
 			psScript =
 			(
 				$PNPMice = Get-WmiObject Win32_USBControllerDevice | `% {[wmi]$_.dependent} | ?{$_.pnpclass -eq 'Mouse'}
@@ -670,37 +689,8 @@ class App {
 			myDevices := App.Utility.EvalPowershell(psScript)
 			return StrSplit(myDevices, "`n").MaxIndex() - 1 > 0 ; Note -1 is due to the output always having a new line at the end...
 		}
-
-		onDeviceChange() {			
-			; mouseDevices := this._identifyMouseDevices()
-			
-			; In most cases, laptops has a touchpad, so the length would always be 1... meanwhile connecting a USB device should obviously increase the value.
-			; this.externalDevicesConnected := mouseDevices.length > 1
-			
-			this.externalDevicesConnected := this._identifyMouseDevices()
-					
-			if (!this.PrecisionTouchPad.preventTouchpadChanges) {
-				if (this.externalDevicesConnected && this.PrecisionTouchpad.getTouchpadState()) {
-					this.PrecisionTouchpad.setTouchpadState("Disabled")
-					OnExit(ObjBindMethod(this.PrecisionTouchpad, "setTouchpadState", "Enabled")) ; This will always be called when AHK process exits... unless it dies, then your left without your touchpad lol!
-				} else if (!this.externalDevicesConnected) {
-					this.PrecisionTouchpad.setTouchpadState("Enabled")
-				}
-			}
-
-			this._suspender(this.externalDevicesConnected)
-		}
 		
-		_suspender(condition) {
-			if (condition && !A_IsSuspended)
-				this.parent.Icon.pause()
-			else if (!condition && this.parent.forceExit)
-				this.parent.Icon.resume()
-			Suspend, % (condition ? "On" : "Off")
-			this.parent.forceExit := condition
-		}
-		
-		; _identifyMouseDevices() { ; Note: Not sure how good is this method of mouse detection, otherwise I'd prefer this..
+		; _identifyMouseDevices() { ; Note: Works on my machine, but not sure how good is this method of mouse detection when taking all machines into account, otherwise I'd prefer this..
 			; mouseMap := {}
 			
 			; RegRead, mouseDeviceCount, % this.mouhidRegPath, Count
@@ -720,12 +710,37 @@ class App {
 				; }
 			; }
 			; mouseMap.length := mouseDeviceCount
-			; return mouseMap
+			; return mouseMap.length > 1 ; In most cases, laptops has a touchpad, so the length would always be 1... meanwhile connecting a USB device should obviously increase the value.
 		; }
+
+		onDeviceChange() {						
+			this.externalDevicesConnected := this._identifyMouseDevices()
+					
+			if (!this.PrecisionTouchPad.preventTouchpadChanges) {
+				if (this.externalDevicesConnected && this.PrecisionTouchpad.getTouchpadState()) {
+					this.PrecisionTouchpad.setTouchpadState("Disabled")
+					OnExit(ObjBindMethod(this.PrecisionTouchpad, "setTouchpadState", "Enabled")) ; This will always be called when AHK process exits... unless it dies, then your left without your touchpad lol!
+				} else if (!this.externalDevicesConnected) {
+					this.PrecisionTouchpad.setTouchpadState("Enabled")
+				}
+			}
+
+			this._suspender(this.externalDevicesConnected)
+		}
 		
-		class PrecisionTouchpad {
+		_suspender(condition) {
+			if (condition && !this.parent.forceExit)
+				this.parent.Icon.pause()
+			else if (!condition && this.parent.forceExit)
+				this.parent.Icon.resume()
+			Suspend, % (condition ? "On" : "Off")
+			this.parent.forceExit := condition
+		}
+		
+		class PrecisionTouchpad { ; Seems like there's no API for working with Precision Touchpad... makes me cry a river.
 			static regPath := "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad"
 			
+			; Note that registry tweaks are READ-ONLY!... If only we could force registry tweaks take immediate effect...
 			getLOWMRegistryState() {
 				RegRead, leaveOnWithMouse, % this.regPath, LeaveOnWithMouse
 				return leaveOnWithMouse
@@ -747,12 +762,13 @@ class App {
 				return App.Utility.EvalPowershell(psScript)
 			}
 			
-			setTouchpadState(forceState := "Enabled") {
+			; A much better alternative to this would be "Run, SystemSettingsAdminFlows.exe EnableTouchPad 0/1" if it worked with AHK...
+			setTouchpadState(forceState := "Enabled") { ; Changes at the driver level... ~~ *somebody screams in the background* -pun intended
 				if (this.preventTouchpadChanges)
 					return
 					
 				if (!A_IsAdmin) {
-					MsgBox, Need 'Administrator' user rights to use 'PrecisionTouchPad.setTouchpadState' method!
+					MsgBox, % "Need 'Administrator' user rights to use 'PrecisionTouchPad.setTouchpadState' method!"
 					return
 				}					
 					
@@ -779,19 +795,15 @@ class App {
 			
 			__New(parentInstance) {
 				this.touchpad := parentInstance
-				OnExit(ObjBindMethod(this, "unHook")) ; Register a function to be called on exit.
 				
 				this.reEnableTouchpadMethod := ObjBindMethod(this, "reEnableTouchpad")
 				this.hHookKeybd := this.setWindowsHookEx((WH_KEYBOARD_LL := 13), RegisterCallback(this.keyboard.name, "Fast", "", &this))
+				OnExit(ObjBindMethod(this, "unhookWindowsHookEx", this.hHookKeybd)) ; Register a function to be called on exit.
 			}
 			
 			reEnableTouchpad() {
 				BlockInput, MouseMoveOff
 				this.touchpad.parent.shouldRestoreCriticalState("typingSuspender")
-			}
-			
-			unHook() {
-				this.unhookWindowsHookEx(this.hHookKeybd)
 			}
 			
 			toggleTimer(timerFunc, state, priority := 0) {
@@ -807,17 +819,17 @@ class App {
 				if (this.touchpad.externalDevicesConnected)
 					return
 								
-				if (!nCode) {
+				if ((wParam = 0x100) || (wParam = 0x101)) { ; WM_KEYDOWN || WM_KEYUP
 					Critical Off
 					BlockInput, MouseMove
 					this.toggleTimer(this.reEnableTouchpadMethod, this.touchpad.parent.reEnableTouchpadInterval)
 				}
-				return this.callNextHookEx(nCode, wParam, lParam)
+				return this.callNextHookEx(nCode, wParam, lParam, this.hHookKeybd)
 			}
 			
-			setWindowsHookEx(idHook, pfn) {  ; Note this might create conflicts with other AHK scripts that uses keyboard, therefore lets send a message that reloads all* AHK scripts 
+			setWindowsHookEx(idHook, callbackFn) {  ; Note this might create conflicts with other AHK scripts that uses keyboard, therefore lets send a message that reloads all* AHK scripts 
 			   this._reloadScripts()
-			   return DllCall("SetWindowsHookEx", "int", idHook, "Uint", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0), "Uint", 0)
+			   return DllCall("SetWindowsHookEx", "int", idHook, "Uint", callbackFn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr") 
 			}
 			
 			unhookWindowsHookEx(hHook) {
@@ -838,7 +850,7 @@ class App {
 					if (scriptHwnd = A_ScriptHwnd) {
 						continue
 					}
-					SendMessage, 0x111, 65303,,, % "ahk_id" . scriptHwnd
+					PostMessage, 0x111, 65303,,, % "ahk_id" . scriptHwnd
 				}
 				DetectHiddenWindows, % previousStates.hiddenWindows
 				SetTitleMatchMode, % previousStates.titleMatchMode
