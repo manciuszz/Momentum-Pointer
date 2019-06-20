@@ -1,7 +1,6 @@
 ; #Warn
 #NoEnv
 #Persistent
-; #MaxThreads 2
 #SingleInstance Force
 Critical 1000000000000000
 SetFormat, FloatFast, 0.11
@@ -40,7 +39,7 @@ class App {
 		this.rate := -0.71575335
 		
 		getParamFromConfig := ObjBindMethod(App.Utility, "GetParamFromIni", this.iniFile, this.configSectionName)	
-		this.skipStartupDialog := GetKeyState("CapsLock", "t") ? 0 : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
+		this.skipStartupDialog := GetKeyState("CapsLock", "T") ? 0 : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
 		
 		this.speedThreshold := %getParamFromConfig%(App.Strings.Params.speedThreshold, this.speedThreshold)
 		this.timeThreshold := %getParamFromConfig%(App.Strings.Params.timeThreshold, this.timeThreshold)
@@ -57,7 +56,7 @@ class App {
 		App.Icon.setup(this)
 
 		if (true) { ; This is super experimental stuff at the moment...		
-			this.shouldPreventTouchpadChanges := false
+			this.shouldPreventTouchpadChanges := false ; True will always prevent automatic touchpad changes, otherwise it will check for "Leave touchpad on when mouse is connected" checkbox inside System Settings.
 			this.reEnableTouchpadInterval := 500 ; Value <= 0 will disable the feature completely.
 			this.touchpadSettings := new App.Touchpad(this)
 		}
@@ -76,7 +75,7 @@ class App {
 		this._main()
 	}
 
-	shouldRestoreCriticalState(stackTrace, isCritical := "") {
+	shouldRestoreCriticalState(stackTrace, isCritical := "") { ; TODO: this could use a refactor sometime..
 		if (stackTrace == "typingSuspender") {
 			this.madeCritical := true
 		} else if (this.madeCritical && isCritical == 0 && stackTrace == "velocityMonitor") {
@@ -150,7 +149,16 @@ class App {
 			resetText := "`t--> OS settings unchanged. <--"
 
 		if !(this.skipStartupDialog) {
-			MsgBox, 3, % this.appName " " this.version, % "Speed Glide Threshold: " this.speedThreshold "`n`nWindows Mouse Parameters`nSpeed: " . MouseSpeed . "`nAcceleration EnhPPr: " acOn "`nThr1: " acThr1 "`nThr2: " acThr2 "`n`n" resetText "`n`nRetain " this.appName " launch options?", 7
+			myDialogText := ""
+			. "`n" "Speed Glide Threshold: " this.speedThreshold
+			. "`n" "Windows Mouse Parameters"
+			. "`n" "Speed: " MouseSpeed
+			. "`n" "Acceleration EnhPPr: " acOn
+			. "`n" "Thr1: " acThr1
+			. "`n" "Thr2: " acThr2
+			. "`n`n" resetText
+			. "`n`n" "Retain " this.appName " launch options?"
+			MsgBox, 3, % this.appName " " this.version, % myDialogText
 			IfMsgBox No	
 			{
 				App.Utility.DeleteParamFromIni(this._osSettingsParams)
@@ -457,11 +465,11 @@ class App {
 		}
 		
 		StdOutStream(sCmd, Callback := "", WorkingDir := 0, ByRef ProcessID := 0) {
-		   Static StrGet := "StrGet"
+		   static StrGet := "StrGet"
 		   tcWrk := WorkingDir=0 ? "Int" : "Str"
 		   DllCall( "CreatePipe", UIntP,hPipeRead, UIntP,hPipeWrite, UInt,0, UInt,0 )
 		   DllCall( "SetHandleInformation", UInt,hPipeWrite, UInt,1, UInt,1 )
-		   if A_PtrSize = 8
+		   if A_PtrSize = 8 ; x64 bit
 		   {
 			  VarSetCapacity( STARTUPINFO, 104, 0  )   
 			  NumPut( 68,         STARTUPINFO,  0 )    
@@ -636,7 +644,7 @@ class App {
 		; static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
 		; static enumRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Enum\HID\"
 
-		__New(parentInstance) {
+		__New(parentInstance) { ; TODO: 'this.PrecisionTouchPad' should be a general touchpad that implements all other types of touchpads
 			this.parent := parentInstance
 			
 			this.PrecisionTouchPad.preventTouchpadChanges := (!this.PrecisionTouchPad.getLOWMRegistryState() || parentInstance.shouldPreventTouchpadChanges) 
@@ -652,10 +660,6 @@ class App {
 			if (parentInstance.reEnableTouchpadInterval > 0 && this.PrecisionTouchPad.preventTouchpadChanges)
 				new this.TypingSuspender(this)
 		}              
-		
-		_restoreOnExit() {
-			this.PrecisionTouchpad.setTouchpadState("Enabled")
-		}
 		
 		_identifyMouseDevices() {
 			psScript =
@@ -678,7 +682,7 @@ class App {
 			if (!this.PrecisionTouchPad.preventTouchpadChanges) {
 				if (this.externalDevicesConnected && this.PrecisionTouchpad.getTouchpadState()) {
 					this.PrecisionTouchpad.setTouchpadState("Disabled")
-					OnExit(ObjBindMethod(this, "_restoreOnExit"))
+					OnExit(ObjBindMethod(this.PrecisionTouchpad, "setTouchpadState", "Enabled")) ; This will always be called when AHK process exits... unless it dies, then your left without your touchpad lol!
 				} else if (!this.externalDevicesConnected) {
 					this.PrecisionTouchpad.setTouchpadState("Enabled")
 				}
@@ -744,13 +748,13 @@ class App {
 			}
 			
 			setTouchpadState(forceState := "Enabled") {
-				if (!A_IsAdmin && !this.preventTouchpadChanges) {
-					MsgBox, Need 'Administrator' user rights to use 'PrecisionTouchPad.setTouchpadState' method!
-					return
-				}
-					
 				if (this.preventTouchpadChanges)
 					return
+					
+				if (!A_IsAdmin) {
+					MsgBox, Need 'Administrator' user rights to use 'PrecisionTouchPad.setTouchpadState' method!
+					return
+				}					
 					
 				setState := ({ "Enabled": "Enable", "Disabled": "Disable" })[forceState]
 				psScript = 
@@ -764,11 +768,11 @@ class App {
 		}
 		
 		; class ElanTouchpad {
-		
+			; TODO: Implement this
 		; }
 		
 		; class SynapticsTouchpad {
-		
+			; TODO: Implement this
 		; }
 		
 		class TypingSuspender {
@@ -811,7 +815,8 @@ class App {
 				return this.callNextHookEx(nCode, wParam, lParam)
 			}
 			
-			setWindowsHookEx(idHook, pfn) {
+			setWindowsHookEx(idHook, pfn) {  ; Note this might create conflicts with other AHK scripts that uses keyboard, therefore lets send a message that reloads all* AHK scripts 
+			   this._reloadScripts()
 			   return DllCall("SetWindowsHookEx", "int", idHook, "Uint", pfn, "Uint", DllCall("GetModuleHandle", "Uint", 0), "Uint", 0)
 			}
 			
@@ -822,6 +827,22 @@ class App {
 			callNextHookEx(nCode, wParam, lParam, hHook = 0) {
 			   return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
 			}	
+			
+			_reloadScripts() {
+				previousStates := { hiddenWindows: A_DetectHiddenWindows, titleMatchMode: A_TitleMatchMode }
+				DetectHiddenWindows, On
+				SetTitleMatchMode, 2
+				WinGet, ahkExeList, List, ahk_class AutoHotkey
+				Loop, % ahkExeList {
+					scriptHwnd := ahkExeList%A_Index%
+					if (scriptHwnd = A_ScriptHwnd) {
+						continue
+					}
+					SendMessage, 0x111, 65303,,, % "ahk_id" . scriptHwnd
+				}
+				DetectHiddenWindows, % previousStates.hiddenWindows
+				SetTitleMatchMode, % previousStates.titleMatchMode
+			}
 		}
 	}
 	
