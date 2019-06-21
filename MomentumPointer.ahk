@@ -89,7 +89,7 @@ class App {
 		
 		resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
 		if (!FileExist(this.iniFile) || resetDefaults == "ERROR") {
-			MsgBox, 67, % "Welcome to " this.appName " v" this.version,
+			MsgBox, 4, % "Welcome to " this.appName " v" this.version,
 			(LTrim,
 				It is highly recommended to use the default Windows settings for your pointing device.
 				Proceed changing to defaults at launch?
@@ -106,8 +106,6 @@ class App {
 				this._osSettingsParams.paramToWrite := 0
 				App.Utility.SetParamToIni(this._osSettingsParams)
 			}
-			IfMsgBox Cancel
-				ExitApp
 		}
 	}
 	
@@ -163,7 +161,6 @@ class App {
 	}
 	
 	_initVariables(_timePeriod := 7) {
-		this.forceExit := false
 		this.TimePeriod := _timePeriod
 		
 		; Counters
@@ -183,6 +180,7 @@ class App {
 	}
 		
 	_startMonitoring() {
+		this.forceExit := false
 		velocityMonitor:		
 			App.Utility.CleanMemory()
 			; Velocity Loop - pointer movement monitor.
@@ -269,12 +267,16 @@ class App {
 	}
 	
 	_main() {
-		OnExit(ObjBindMethod(this.Icon, "exitFn"))
-		OnMessage((WM_COMMAND := 0x111), ObjBindMethod(this.Icon, "onTrayAction"))
+		if (!this.exitFn && !this.onTrayActionFn) {
+			this.exitFn := ObjBindMethod(this.Icon, "exitFn")
+			this.onTrayActionFn := ObjBindMethod(this.Icon, "onTrayAction")
+			OnExit(this.exitFn)
+			OnMessage((WM_COMMAND := 0x111), this.onTrayActionFn)
 			
-		if !(App.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
-			MsgBox, RegisterRawInputDevices failure.
-		
+			if !(App.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
+				MsgBox, % "RegisterRawInputDevices failure."
+		}
+			
 		if (!A_IsSuspended) {			
 			Menu, Tray, Icon, % "HICON:*" this.hICon
 			TrayTip, % this.appName, Enabled, 0, 0
@@ -291,6 +293,9 @@ class App {
 			App.Icon.resume()
 		Suspend, % (condition ? "On" : "Off")
 		this.forceSleep := condition
+		
+		if (this.forceExit)
+			this._startMonitoring()
 	}
 		
 	class Icon {	
@@ -309,17 +314,8 @@ class App {
 		}
 		
 		onTrayAction(wParam) {
-			this.iconToggle := ""
-			if (wParam = 65305) {
-				this.iconToggle := A_IsSuspended
-			} else if (wParam = 65306) {
-				this.iconToggle := A_IsPaused
-			} else if (wParam = 11003 || wParam = 11005 || wParam = 11006 || wParam = 11007) { ; OpenGUI, Pause, Reload or Exit tray buttons were clicked
+			if (wParam = 11003 || wParam = 11005 || wParam = 11006 || wParam = 11007) { ; OpenGUI, Pause, Reload or Exit tray buttons were clicked
 				this.parent.forceExit := true	
-			}
-				
-			if (this.iconToggle != "") {
-				this[this.iconToggle ? "resume" : "pause"]()
 			}
 		}
 		
@@ -332,7 +328,6 @@ class App {
 		resume() {
 			TrayTip, % this.parent.appName, Resumed!, 0, 0
 			Menu, Tray, Icon, % "HICON:*" this.hICon
-			this.parent.forceExit := false
 		}
 		
 		modifyTray() {
@@ -353,14 +348,17 @@ class App {
 			static togglePause := false
 			
 			OpenGUI:
-				parentInstance.guiInstance := new App.GUI(parentInstance)
+				new App.GUI(parentInstance)
 			return
 			
 			PauseApplication:
+				if (parentInstance.touchpadSettings.externalDevicesConnected) {
+					TrayTip, % parentInstance.appName, External devices connected!, 0, 0
+					return
+				}
+				
 				togglePause := !togglePause
-				parentInstance._suspender(togglePause)
-				if (!togglePause)
-					parentInstance._startMonitoring()
+				parentInstance._suspender(togglePause)				
 			return
 			
 			ReloadApplication:
@@ -572,20 +570,21 @@ class App {
 			this.parent := parentInstance
 			this.guiName := this.parent.appName . " | Parameters"
 						
-			if (!this.parent.guiInstance)
-				this.paramsMenu().render()
-			else
-				this.parent.guiInstance.render()
+			if (this.parent.guiInstance)
+				return this.parent.guiInstance.render()
+			
+			this.parent.guiInstance := this.paramsMenu().render()
 		}
 		
 		render() {
 			Gui, Show,, % this.guiName
+			return this
 		}
 		
 		_onClose() {
 			GuiClose:
 				ExitApp
-			return
+			return this
 		}
 		
 		paramsMenu() {
@@ -837,7 +836,7 @@ class App {
 				this.reEnableTouchpadMethod := ObjBindMethod(this, "reEnableTouchpad")
 				this.hHookKeybd := this.setWindowsHookEx((WH_KEYBOARD_LL := 13), RegisterCallback(this.keyboard.name, "Fast", "", &this))
 				
-			    this._reloadScripts() ; Noticed that this seems to mess with the scripts TrayTip Icons...
+			    this._reloadScripts() ; Noticed that this seems to mess with the scripts TrayTip Icons for whatever reason...
 				OnExit(ObjBindMethod(this, "unhook"))
 			}
 			
