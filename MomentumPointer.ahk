@@ -39,7 +39,7 @@ class App {
 		this.defaults.rate := -0.71575335
 		
 		getParamFromConfig := ObjBindMethod(App.Utility, "GetParamFromIni", this.iniFile, this.configSectionName)	
-		this.skipStartupDialog := GetKeyState("CapsLock", "T") ? 0 : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
+		this.skipStartupDialog := GetKeyState("CapsLock", "T") ? false : %getParamFromConfig%(App.Strings.skipStartupDialog, false)
 		
 		this.speedThreshold := %getParamFromConfig%(App.Strings.Params.speedThreshold, this.defaults.speedThreshold)
 		this.timeThreshold := %getParamFromConfig%(App.Strings.Params.timeThreshold, this.defaults.timeThreshold)
@@ -203,7 +203,7 @@ class App {
 					Critical 1000000000000000
 				}
 				
-				if (this.forceExit) {
+				if (this.forceSleep) {
 					Sleep, % this.suspendedStateSleepInterval
 					continue
 				}
@@ -256,7 +256,7 @@ class App {
 			this.Array2 := this.Array1 := this.Array0 := 0  
 			; Gliding Loop - pointer glide.
 			Loop {
-				if (this.forceExit) {
+				if (this.forceSleep) {
 					Sleep, % this.suspendedStateSleepInterval
 					continue
 				}
@@ -323,8 +323,7 @@ class App {
 		
 		pause() {
 			TrayTip, % this.parent.appName, Paused., 0, 0
-			Menu, Tray, Icon, % "HICON:*" this.hIConOff
-			Menu, Tray, Icon,,, 1
+			Menu, Tray, Icon, % "HICON:*" this.hIConOff,, 1
 			this.parent._initVariables()
 		}
 		
@@ -563,7 +562,7 @@ class App {
 				rate: this.getInputValue(App.Strings.ActiveField.rate)
 			)}
 			
-			for field, value in inputFieldValues {
+			for field, value in inputFieldValues { ; Simple input field validation
 				if (!RegExMatch(value, "^\-?(((\d+)?\.)?[\d]+$)")) {
 					MsgBox % "Field '" . field . "' value " . value . " is invalid!"
 					return
@@ -602,13 +601,12 @@ class App {
 			this.editMenuOption("Checkbox", !this.parent.skipStartupDialog ? "Checked" : "", App.Strings.ActiveField.checkboxState)
 		}
 		
-		addReadonlyFields() {
-			ReadOnlyFLAG := true
-			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.speedThreshold, "NewColumn", ReadOnlyFLAG)
-			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.timeThreshold,, ReadOnlyFLAG)
-			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.timeDial,, ReadOnlyFLAG)
-			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.distance,, ReadOnlyFLAG)
-			this.editMenuOption("Edit",, App.Strings.ReadOnlyField.rate,, ReadOnlyFLAG)
+		addReadonlyFields(ReadOnlyFLAG := true) {
+			this.editMenuOption("Edit", "Text", App.Strings.ReadOnlyField.speedThreshold, "NewColumn", ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Text", App.Strings.ReadOnlyField.timeThreshold,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Text", App.Strings.ReadOnlyField.timeDial,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Text", App.Strings.ReadOnlyField.distance,, ReadOnlyFLAG)
+			this.editMenuOption("Edit", "Text", App.Strings.ReadOnlyField.rate,, ReadOnlyFLAG)
 		}
 		
 		fillInputFields() {
@@ -661,8 +659,6 @@ class App {
 	}
 	
 	class Touchpad {
-		; static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
-		; static enumRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Enum\HID\"
 
 		__New(parentInstance) { ; TODO: 'this.PrecisionTouchPad' should be a general touchpad that implements all other types of touchpads
 			this.parent := parentInstance
@@ -691,6 +687,8 @@ class App {
 			return StrSplit(myDevices, "`n").MaxIndex() - 1 > 0 ; Note -1 is due to the output always having a new line at the end...
 		}
 		
+		; static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
+		; static enumRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Enum\HID\"
 		; _identifyMouseDevices() { ; Note: Works on my machine, but not sure how good is this method of mouse detection when taking all machines into account, otherwise I'd prefer this..
 			; mouseMap := {}
 			
@@ -730,15 +728,16 @@ class App {
 		}
 		
 		_suspender(condition) {
-			if (condition && !this.parent.forceExit)
+			if (condition && !this.parent.forceSleep)
 				this.parent.Icon.pause()
-			else if (!condition && this.parent.forceExit)
+			else if (!condition && this.parent.forceSleep)
 				this.parent.Icon.resume()
 			Suspend, % (condition ? "On" : "Off")
-			this.parent.forceExit := condition
+			this.parent.forceSleep := condition
 		}
 		
 		class PrecisionTouchpad { ; Seems like there's no API for working with Precision Touchpad... makes me cry a river.
+			static touchpadRegexFilter := "TouchPad|Touch Pad"
 			static regPath := "HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\PrecisionTouchPad"
 			
 			; Note that registry tweaks are READ-ONLY!... If only we could force registry tweaks take immediate effect...
@@ -755,28 +754,30 @@ class App {
 			}
 		
 			getTouchpadState() {
+				matchRegex := this.touchpadRegexFilter
 				psScript = 
 				(
-					$Touchpad = Get-PnpDevice | `% { if ($_.FriendlyName -match 'TouchPad|Touch Pad') { $_ } }
+					$Touchpad = Get-PnpDevice | `% { if ($_.FriendlyName -match '%matchRegex%') { $_ } }
 					if ($Touchpad.Status -eq 'OK') { 1 } else { 0 }
 				)
 				return App.Utility.EvalPowershell(psScript)
 			}
 			
 			; A much better alternative to this would be "Run, SystemSettingsAdminFlows.exe EnableTouchPad 0/1" if it worked with AHK...
-			setTouchpadState(forceState := "Enabled") { ; Changes at the driver level... ~~ *somebody screams in the background* -pun intended
+			setTouchpadState(forceState := "Enabled") { ; Does changes at the driver level...
 				if (this.preventTouchpadChanges)
 					return
 					
 				if (!A_IsAdmin) {
 					MsgBox, % "Need 'Administrator' user rights to use 'PrecisionTouchPad.setTouchpadState' method!"
 					return
-				}					
-					
+				}	
+				
+				matchRegex := this.touchpadRegexFilter
 				setState := ({ "Enabled": "Enable", "Disabled": "Disable" })[forceState]
 				psScript = 
 				(
-					$Touchpad = Get-PnpDevice | `% { if ($_.FriendlyName -match 'TouchPad|Touch Pad') { $_ } }
+					$Touchpad = Get-PnpDevice | `% { if ($_.FriendlyName -match '%matchRegex%') { $_ } }
 					$HID = $Touchpad.InstanceId
 					%setState%-PnpDevice -InstanceId $HID -Confirm:$false
 				)
@@ -799,7 +800,9 @@ class App {
 				
 				this.reEnableTouchpadMethod := ObjBindMethod(this, "reEnableTouchpad")
 				this.hHookKeybd := this.setWindowsHookEx((WH_KEYBOARD_LL := 13), RegisterCallback(this.keyboard.name, "Fast", "", &this))
-				OnExit(ObjBindMethod(this, "unhookWindowsHookEx", this.hHookKeybd)) ; Register a function to be called on exit.
+				
+			    this._reloadScripts()
+				OnExit(ObjBindMethod(this, "unhook")) ; Register a function to be called on exit.
 			}
 			
 			reEnableTouchpad() {
@@ -828,8 +831,7 @@ class App {
 				return this.callNextHookEx(nCode, wParam, lParam, this.hHookKeybd)
 			}
 			
-			setWindowsHookEx(idHook, callbackFn) {  ; Note this might create conflicts with other AHK scripts that uses keyboard, therefore lets send a message that reloads all* AHK scripts 
-			   this._reloadScripts()
+			setWindowsHookEx(idHook, callbackFn) {  ; Note this might create conflicts with other AHK scripts that uses keyboard, therefore lets send a message that reloads all* AHK scripts after this...
 			   return DllCall("SetWindowsHookEx", "int", idHook, "Uint", callbackFn, "Uint", DllCall("GetModuleHandle", "Uint", 0, "Ptr"), "Uint", 0, "Ptr") 
 			}
 			
@@ -839,9 +841,13 @@ class App {
 			
 			callNextHookEx(nCode, wParam, lParam, hHook = 0) {
 			   return DllCall("CallNextHookEx", "Uint", hHook, "int", nCode, "Uint", wParam, "Uint", lParam)
-			}	
+			}
 			
-			_reloadScripts() {
+			unhook() {
+				this.unhookWindowsHookEx(this.hHookKeybd)
+			}
+			
+			_reloadScripts() { ; TODO: This should probably be used as a callback trigger instead of pinging every AHK script... (imagine 10 scripts reloading at the same time... *oof*)
 				previousStates := { hiddenWindows: A_DetectHiddenWindows, titleMatchMode: A_TitleMatchMode }
 				DetectHiddenWindows, On
 				SetTitleMatchMode, 2
