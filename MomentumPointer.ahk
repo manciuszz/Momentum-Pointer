@@ -70,7 +70,6 @@ class App {
 	
 	setup() {
 		this._initSettings()
-		this._initOSPointerSettings()
 		this._initVariables()
 		this._main()
 	}
@@ -94,28 +93,28 @@ class App {
 			(LTrim,
 				It is highly recommended to use the default Windows settings for your pointing device.
 				Proceed changing to defaults at launch?
-				(Revert anytime at 'Start > Mouse > Pointer Options > Motion').
+				(You can revert anytime by going 'Start > Mouse > Pointer Options > Motion').
 			)
 			IfMsgBox Yes
 			{
 				this._osSettingsParams.paramToWrite := 1
 				App.Utility.SetParamToIni(this._osSettingsParams)
-				this.setup()
+				this._updatePointerSettings()
 			}
 			IfMsgBox No
 			{
 				this._osSettingsParams.paramToWrite := 0
 				App.Utility.SetParamToIni(this._osSettingsParams)
-				this.skipStartupDialog := 1
 			}
 			IfMsgBox Cancel
 				ExitApp
 		}
-		this.resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
 	}
 	
 	; Note that these settings seems to not have any effect on Precision Touchpad Q.Q
-	_initOSPointerSettings() {
+	_updatePointerSettings() {
+		this.resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
+		
 		;Restore to default any OS pointer settings and confirm OS pointer settings values.
 		SPI_GETMOUSESPEED = 0x70
 		SPI_SETMOUSESPEED = 0x71
@@ -126,7 +125,7 @@ class App {
 		User32Module := DllCall("GetModuleHandle", Str, "user32", "Ptr")
 		SPIProc := DllCall("GetProcAddress", "Ptr", User32Module, "AStr", "SystemParametersInfoW", "Ptr")
 	
-		;Set mouse speed to default 10 and get value.
+		; Set mouse speed to default 10 and get value.
 		if (this.resetDefaults)
 			DllCall(SPIProc, UInt, SPI_SETMOUSESPEED, UInt, 0, UInt, 10, UInt, 0)
 		
@@ -148,34 +147,23 @@ class App {
 		VarSetCapacity(vValue, 0) ; Release memory
 		
 		if (this.resetDefaults)
-			resetText := "`t--> OS settings modified! <--"
+			resetText := "--> Mouse settings modified! <--"
 		else
-			resetText := "`t--> OS settings unchanged. <--"
+			resetText := "--> Mouse settings unchanged. <--"
 
-		if !(this.skipStartupDialog) {
-			myDialogText := ""
-			. "`n" "Speed Glide Threshold: " this.speedThreshold
-			. "`n" "Windows Mouse Parameters"
-			. "`n" "Speed: " MouseSpeed
-			. "`n" "Acceleration EnhPPr: " acOn
-			. "`n" "Thr1: " acThr1
-			. "`n" "Thr2: " acThr2
-			. "`n`n" resetText
-			. "`n`n" "Retain " this.appName " launch options?"
-			MsgBox, 3, % this.appName " " this.version, % myDialogText
-			IfMsgBox No	
-			{
-				App.Utility.DeleteParamFromIni(this._osSettingsParams)
-				this.setup()
-			}
-			IfMsgBox Cancel
-				ExitApp
-		} else {
-			App.Utility.DllSleep(1000)
-		}
+		myDialogText := ""
+		. "`n" "Speed Glide Threshold: " this.speedThreshold
+		. "`n" "Windows Mouse Parameters"
+		. "`n" "Speed: " MouseSpeed
+		. "`n" "Acceleration EnhPPr: " acOn
+		. "`n" "Thr1: " acThr1
+		. "`n" "Thr2: " acThr2
+		. "`n`n" resetText
+		MsgBox, 0, % this.appName " " this.version, % myDialogText
 	}
 	
 	_initVariables(_timePeriod := 7) {
+		this.forceExit := false
 		this.TimePeriod := _timePeriod
 		
 		; Counters
@@ -199,6 +187,9 @@ class App {
 			App.Utility.CleanMemory()
 			; Velocity Loop - pointer movement monitor.
 			Loop {
+				if (this.forceExit)
+					return
+				
 				if (this.shouldRestoreCriticalState("velocityMonitor", A_IsCritical)) {
 					Critical 1000000000000000
 				}
@@ -206,7 +197,7 @@ class App {
 				if (this.forceSleep) {
 					Sleep, % this.suspendedStateSleepInterval
 					continue
-				}
+				} 
 								
 				Sleep, -1
 				App.Utility.DllSleep(this.monitorSleepTime)
@@ -259,7 +250,7 @@ class App {
 				if (this.forceSleep) {
 					Sleep, % this.suspendedStateSleepInterval
 					continue
-				}
+				} 
 				App.Utility.DllSleep(1)
 				; Calculate elapsed time from Velocity Loop exit and simulate inertial pointer displacement.
 				this.cT0 := App.Utility.GetTickCount()
@@ -278,9 +269,9 @@ class App {
 	}
 	
 	_main() {
-		OnExit(ObjBindMethod(this.Icon, "exitFn")) ; Register a function to be called on exit.
-		OnMessage((WM_COMMAND := 0x111), ObjBindMethod(this.Icon, "changeOnMsg"))
-		
+		OnExit(ObjBindMethod(this.Icon, "exitFn"))
+		OnMessage((WM_COMMAND := 0x111), ObjBindMethod(this.Icon, "onTrayAction"))
+			
 		if !(App.Utility.RI_RegisterDevices()) ; RawInput register. Flag QS_RAWINPUT = 0x0400
 			MsgBox, RegisterRawInputDevices failure.
 		
@@ -292,6 +283,15 @@ class App {
 		DllCall("Winmm\timeBeginPeriod", "UInt", this.TimePeriod) ; Provide adequate resolution for Sleep.
 		this._startMonitoring()
 	}
+	
+	_suspender(condition) {
+		if (condition && !this.forceSleep)
+			App.Icon.pause()
+		else if (!condition && this.forceSleep)
+			App.Icon.resume()
+		Suspend, % (condition ? "On" : "Off")
+		this.forceSleep := condition
+	}
 		
 	class Icon {	
 		setup(parentInstance) {
@@ -301,19 +301,21 @@ class App {
 			this.hICon := this.Hex2Icon(_iconData)
 			_iconData = 0000010001001010000001002000a70200001600000089504e470d0a1a0a0000000d49484452000000100000001008060000001ff3ff61000000097048597300000b1300000b1301009a9c180000025949444154388d75d25d4853611cc7f1ef993bdbcee6668a96db4437937c814a1114236c45174a17194a17451004d5ad7553187823bddc4620641408dd0c52a2842ea482228444b3f28d42d406e994f6d2ceced9dc3c5d38edb4d973f73ccffff7795e85f1c646f4ed61abef8298da18145465ede2c4c45efe6d66a014b001ab40c8905540435df5b52aaf8789af3325f7dcce4fba2907d001f40383c055a03007486f1aa2bed6a354547a189bfa72f85ddb890ec00e7401778036a001380338730025ae5852e934a7dbdbb1e6db1979fd7e384fb29c037a800a40c894ae03b11c20994a48914814b364e194ef1875a934e1e4463f50a90b2f014f809fc66c40d334a3a22ac48241ea3792949944ecaaba1d1480efc06de01590c8d9c1664a73a77fcb98e7e6f1cccce24824fede8f288681bbc03320029003084925cf343d8d6b7212aba280a68120103599795b54b4a7e8567700886ed76703f6d21f015be1d8181659de19942d16166aaa59f17a199e5dbaaf0fe8efc00e74d5cccf222acacea06ab3f1c16e27a06dc63ce5e5370b8a8b5fec0638804ea047d285e3361be1e626165783c8aa9a7fdcef7f907d6443267c16e865eba9b6569624422d2d189a9bc06a23148e3075bef3c66e800fb84ee69368a0c52529b5ec2878bce87405cd050eaaf657128d2b7cfc3cd7fb3fc09be96b022c5b15e5ca81d595eef16f0b03724ca6fed0416a6bebf815932df4f5f8b28118a0002a300ff4017e20ea1f191d08ac04595b5fc3ed76e27695250da265590fe45d76b95420044c018f809719944b5663e4b9d1244a46b1ccb5afe4e9c9a1a123dae89b901ef8030acdd4325779f2940000000049454e44ae426082
 			this.hIConOff := this.Hex2Icon(_iconData)
-			Menu, Tray, Icon, % "HICON:*" this.hIConOff
-			Menu, Tray, Tip, % this.parent.appName
+			
+			this.modifyTray()
 			
 			this.parent.hICon := this.hICon
 			this.parent.hIConOff := this.hIConOff
 		}
 		
-		changeOnMsg(wParam) {
+		onTrayAction(wParam) {
 			this.iconToggle := ""
 			if (wParam = 65305) {
 				this.iconToggle := A_IsSuspended
 			} else if (wParam = 65306) {
 				this.iconToggle := A_IsPaused
+			} else if (wParam = 11003 || wParam = 11005 || wParam = 11006 || wParam = 11007) { ; OpenGUI, Pause, Reload or Exit tray buttons were clicked
+				this.parent.forceExit := true	
 			}
 				
 			if (this.iconToggle != "") {
@@ -330,14 +332,53 @@ class App {
 		resume() {
 			TrayTip, % this.parent.appName, Resumed!, 0, 0
 			Menu, Tray, Icon, % "HICON:*" this.hICon
+			this.parent.forceExit := false
+		}
+		
+		modifyTray() {
+			static parentInstance := false
+			parentInstance := this.parent
+			Menu, Tray, NoStandard
+			Menu, Tray, Tip, % this.parent.appName
+			Menu, Tray, Add, Open GUI, OpenGUI 
+			Menu, Tray, Add
+			
+			Menu, Tray, Icon, % "HICON:*" this.hIConOff
+			
+			Menu, Tray, Add, Pause app, PauseApplication
+			Menu, Tray, Add, Reload app, ReloadApplication
+			Menu, Tray, Add, Exit app, ExitApplication
+			return
+			
+			static togglePause := false
+			
+			OpenGUI:
+				parentInstance.guiInstance := new App.GUI(parentInstance)
+			return
+			
+			PauseApplication:
+				togglePause := !togglePause
+				parentInstance._suspender(togglePause)
+				if (!togglePause)
+					parentInstance._startMonitoring()
+			return
+			
+			ReloadApplication:
+				Reload
+			return
+			
+			ExitApplication:
+				ExitApp
+			return
 		}
 		
 		exitFn(ExitReason, ExitCode) {
 			DllCall("Winmm\timeEndPeriod", UInt, this.parent.TimePeriod) ; Should be called to restore system to normal.
-			VarSetCapacity(App.Utility._POINTER, 0) ;Free memory.
+			VarSetCapacity(App.Utility._POINTER, 0) ; Free memory.
 			Menu, Tray, Icon, % "HICON:*" this.hIConOff
-			TrayTip, % this.parent.appName, Terminating, 0, 0
-			App.Utility.DllSleep(2000)
+			TrayTip, % this.parent.appName, % ExitReason . "ing", 0, 0
+			App.Utility.DllSleep((ExitReason == "Reload" ? 1000 : 2000))
+			TrayTip
 		}
 		
 		Hex2Icon(iconDataHex) {
@@ -530,7 +571,11 @@ class App {
 		__New(parentInstance) {
 			this.parent := parentInstance
 			this.guiName := this.parent.appName . " | Parameters"
-			this.paramsMenu().render()
+						
+			if (!this.parent.guiInstance)
+				this.paramsMenu().render()
+			else
+				this.parent.guiInstance.render()
 		}
 		
 		render() {
@@ -724,16 +769,7 @@ class App {
 				}
 			}
 
-			this._suspender(this.externalDevicesConnected)
-		}
-		
-		_suspender(condition) {
-			if (condition && !this.parent.forceSleep)
-				this.parent.Icon.pause()
-			else if (!condition && this.parent.forceSleep)
-				this.parent.Icon.resume()
-			Suspend, % (condition ? "On" : "Off")
-			this.parent.forceSleep := condition
+			this.parent._suspender(this.externalDevicesConnected)
 		}
 		
 		class PrecisionTouchpad { ; Seems like there's no API for working with Precision Touchpad... makes me cry a river.
@@ -801,8 +837,8 @@ class App {
 				this.reEnableTouchpadMethod := ObjBindMethod(this, "reEnableTouchpad")
 				this.hHookKeybd := this.setWindowsHookEx((WH_KEYBOARD_LL := 13), RegisterCallback(this.keyboard.name, "Fast", "", &this))
 				
-			    this._reloadScripts()
-				OnExit(ObjBindMethod(this, "unhook")) ; Register a function to be called on exit.
+			    this._reloadScripts() ; Noticed that this seems to mess with the scripts TrayTip Icons...
+				OnExit(ObjBindMethod(this, "unhook"))
 			}
 			
 			reEnableTouchpad() {
