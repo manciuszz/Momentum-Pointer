@@ -85,7 +85,7 @@ class App {
 	}
 	
 	_initSettings() {
-		this._osSettingsParams := { iniFile: this.iniFile, sectionName: "OSsettings", paramName: "resetDefaults", defaultParam: "ERROR" }
+		this._osSettingsParams := { iniFile: this.iniFile, sectionName: "MousePointerSettings", paramName: "resetDefaults", defaultParam: "ERROR" }
 		
 		resetDefaults := App.Utility.GetParamFromIni(this._osSettingsParams)
 		if (!FileExist(this.iniFile) || resetDefaults == "ERROR") {
@@ -161,7 +161,7 @@ class App {
 	}
 	
 	_initVariables(_timePeriod := 7) {
-		this.TimePeriod := _timePeriod
+		this.timePeriod := _timePeriod
 		
 		; Counters
 		this.cT0 := this.cT1 := 0 
@@ -282,7 +282,7 @@ class App {
 			TrayTip, % this.appName, Enabled, 0, 0
 		}			
 
-		DllCall("Winmm\timeBeginPeriod", "UInt", this.TimePeriod) ; Provide adequate resolution for Sleep.
+		App.Utility.TogglePeriodicTimerResolution(this.timePeriod) ; Provide adequate resolution for Sleep.
 		this._startMonitoring()
 	}
 	
@@ -315,7 +315,7 @@ class App {
 		
 		onTrayAction(wParam) {
 			if (wParam = 11003 || wParam = 11005 || wParam = 11006 || wParam = 11007) { ; OpenGUI, Pause, Reload or Exit tray buttons were clicked
-				this.parent.forceExit := true	
+				this.parent.forceExit := true ; Breaks out of the 'velocityMonitor' loop and exits the _startMonitoring function to 'release' the thread.
 			}
 		}
 		
@@ -344,16 +344,15 @@ class App {
 			Menu, Tray, Add, Reload app, ReloadApplication
 			Menu, Tray, Add, Exit app, ExitApplication
 			return
-			
-			static togglePause := false
-			
+						
 			OpenGUI:
 				new App.GUI(parentInstance)
 			return
 			
+			static togglePause := false
 			PauseApplication:
 				if (parentInstance.touchpadSettings.externalDevicesConnected) {
-					TrayTip, % parentInstance.appName, External devices connected!, 0, 0
+					TrayTip, % parentInstance.appName, % "External devices connected!", 0, 0
 					return
 				}
 				
@@ -371,8 +370,8 @@ class App {
 		}
 		
 		exitFn(ExitReason, ExitCode) {
-			DllCall("Winmm\timeEndPeriod", UInt, this.parent.TimePeriod) ; Should be called to restore system to normal.
-			VarSetCapacity(App.Utility._POINTER, 0) ; Free memory.
+			App.Utility.TogglePeriodicTimerResolution() ; Should be called to restore system to normal.
+			VarSetCapacity(App.Utility._POINTER, 0) ; Free memory...
 			Menu, Tray, Icon, % "HICON:*" this.hIConOff
 			TrayTip, % this.parent.appName, % ExitReason . "ing", 0, 0
 			App.Utility.DllSleep((ExitReason == "Reload" ? 1000 : 2000))
@@ -414,7 +413,7 @@ class App {
 		}
 	
 		GetFrequencyCounter() {
-			; getFreqCount := -1
+			; getFreqCount := -1 ; #Warn directive was screaming at me to implement this, but meh...
 			DllCall("QueryPerformanceFrequency", "Int64*", getFreqCount)
 			return getFreqCount
 		}		
@@ -423,6 +422,17 @@ class App {
 			; tickCount := -1
 			DllCall("QueryPerformanceCounter", "Int64*", tickCount)
 			return tickCount
+		}
+		
+		TogglePeriodicTimerResolution(timePeriod) {
+			static _uPeriod := ""
+			if (timePeriod != "") {
+				if (!_uPeriod) _uPeriod := timePeriod
+				DllCall("Winmm\timeBeginPeriod", UInt, _uPeriod)
+			} else if (!timePeriod && _uPeriod) {
+				DllCall("Winmm\timeEndPeriod", UInt, _uPeriod)
+				_uPeriod := ""
+			}
 		}
 		
 		DllSleep(timeMS) {
@@ -728,7 +738,7 @@ class App {
 				$PNPMice | `% { $_.Name }
 			)
 			myDevices := App.Utility.EvalPowershell(psScript)
-			return StrSplit(myDevices, "`n").MaxIndex() - 1 > 0 ; Note -1 is due to the output always having a new line at the end...
+			return StrSplit(myDevices, "`n").MaxIndex() - 1 > 0 ; Note -1 is due to the output 'myDevices' always having a new line at the end...
 		}
 		
 		; static mouhidRegPath := "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\mouhid\Enum"
